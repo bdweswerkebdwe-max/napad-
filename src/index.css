@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --font-cairo: "Cairo", "Plus Jakarta Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --color-brand-primary: #ff2d55; /* Vibrant Instagram/TikTok neon pink/red */
+  --color-brand-secondary: #00f2fe; /* Cyber neon cyan */
+  --color-brand-gradient-start: #ff007f;
+  --color-brand-gradient-end: #7f00ff;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-cairo);
+    background-color: #0b0f19; /* Default rich cinematic dark theme for modern feeds */
+    color: #f8fafc;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Custom modern scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.3);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 45, 85, 0.4);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 45, 85, 0.7);
+}
+
+/* Vertical video scrolling container like TikTok */
+.vertical-snap-container {
+  scroll-snap-type: y mandatory;
+  overflow-y: scroll;
+  height: 100%;
+}
+.vertical-snap-item {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "نبض | Nabd",
+  "description": "تطبيق تواصل اجتماعي متكامل وعصري بمواصفات احترافية شبيهة بالتطبيقات العالمية (مثل TikTok و Instagram) مع دعم القصص، الفيديوهات القصيرة، المنشورات، البث المباشر والمحادثات المباشرة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

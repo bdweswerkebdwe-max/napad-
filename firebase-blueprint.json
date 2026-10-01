@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile schema including stats and followers details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier of the user" },
+        "email": { "type": "string", "format": "email", "description": "User email address" },
+        "username": { "type": "string", "maxLength": 30, "pattern": "^[a-zA-Z0-9_]+$", "description": "Unique alphanumeric username handle" },
+        "displayName": { "type": "string", "maxLength": 50, "description": "Display name of the user" },
+        "bio": { "type": "string", "maxLength": 160, "description": "Biographical summary" },
+        "avatar": { "type": "string", "description": "URL of the avatar image" },
+        "coverPhoto": { "type": "string", "description": "URL of the cover photo" },
+        "followersCount": { "type": "integer" },
+        "followingCount": { "type": "integer" },
+        "likesCount": { "type": "integer" },
+        "visitorsCount": { "type": "integer" },
+        "isVerified": { "type": "boolean" },
+        "followers": { "type": "array" },
+        "following": { "type": "array" }
+      },
+      "required": ["uid", "email", "username", "displayName"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Post item representing a text-image or short video reel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["video", "text-image"] },
+        "author": { "type": "object" },
+        "content": { "type": "string", "maxLength": 280 },
+        "mediaUrl": { "type": "string" },
+        "likes": { "type": "array" },
+        "saves": { "type": "array" },
+        "commentsCount": { "type": "integer" },
+        "shares": { "type": "integer" },
+        "hashtags": { "type": "array" },
+        "timestamp": { "type": "string" },
+        "privacy": { "type": "string", "enum": ["public", "followers", "private"] }
+      },
+      "required": ["id", "type", "author", "content"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Sub-comment item under a parent Post",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "author": { "type": "object" },
+        "text": { "type": "string", "maxLength": 200 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "author", "text"]
+    },
+    "Story": {
+      "title": "Story",
+      "description": "Temporary story viewable for 24 hours",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatar": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "userId", "mediaUrl"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Single text/call log message inside a private Chat room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string" },
+        "mediaType": { "type": "string", "enum": ["text", "image", "voice", "call_log"] },
+        "callType": { "type": "string", "enum": ["audio", "video"] },
+        "callDuration": { "type": "string" }
+      },
+      "required": ["id", "senderId", "text", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Activity alerts for likes, comments, follows, system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["like", "comment", "follow", "system"] },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "avatar": { "type": "string" },
+        "postId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["id", "type", "text", "isRead"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Stores individual user profile data and statistics"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Stores short videos and posts uploaded by creators"
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Sub-collection under a post storing visitor comments"
+    },
+    "/stories/{storyId}": {
+      "schema": "Story",
+      "description": "Stores user daily stories that vanish in 24 hours"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Direct message list inside a private chat room"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Alert signals for active logged-in users"
+    }
+  }
+}
