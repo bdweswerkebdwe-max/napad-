@@ -13,7 +13,8 @@ interface CreateModalProps {
   onClose: () => void;
 }
 
-type ModeType = 'text' | 'image' | '15s' | '60s' | '10m' | 'live' | 'audio_room';
+type MainTabType = 'video' | 'post' | 'story' | 'live' | 'audio_room';
+type VideoDurationType = '15s' | '60s' | '10m';
 
 const TIKTOK_SOUNDS = [
   { id: 's1', name: 'نبض الترند - موسيقى حماسية 🔥', artist: 'برعاية نبض', duration: '0:15' },
@@ -33,8 +34,9 @@ const CAMERA_EFFECTS = [
 export default function CreateModal({ onClose }: CreateModalProps) {
   const { createNewPost, createStory, currentUser, uploadFileToStorage } = useApp();
 
-  // Mode Selection State
-  const [activeMode, setActiveMode] = useState<ModeType>('15s');
+  // 1. Core 5 Tabs Navigation States (Horizontal Mode Switcher)
+  const [mainTab, setMainTab] = useState<MainTabType>('video');
+  const [videoDuration, setVideoDuration] = useState<VideoDurationType>('15s');
 
   // Hardware permission & media stream state
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -50,7 +52,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [showFiltersTray, setShowFiltersTray] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState<'0.5x' | '1x' | '2x'>('1x');
   const [isBeautyEnabled, setIsBeautyEnabled] = useState(false);
-  const [isFlashEnabled, setIsFlashEnabled] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   
   // Timer States
@@ -63,7 +64,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // File picker / Content post states
+  // Post / Story fields
   const [mediaUrl, setMediaUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [textContent, setContent] = useState('');
@@ -92,11 +93,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Trigger media stream on entry or mode change
+  // Trigger media stream on mainTab change or setup changes
   useEffect(() => {
-    // If text mode or audio room, we don't need video camera stream, but audio room needs mic
-    const needsVideo = activeMode !== 'text' && activeMode !== 'audio_room' && !showAudioRoomSimulator;
-    const needsAudio = activeMode !== 'text';
+    // If post or audio room (before simulation), we do not need live video camera preview, but audio room needs mic
+    const needsVideo = mainTab !== 'post' && mainTab !== 'audio_room' && !showAudioRoomSimulator;
+    const needsAudio = mainTab !== 'post';
 
     if (needsVideo || needsAudio) {
       if (cameraStream) {
@@ -127,16 +128,16 @@ export default function CreateModal({ onClose }: CreateModalProps) {
         cameraStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [activeMode, facingMode, showLiveSimulator, showAudioRoomSimulator]);
+  }, [mainTab, facingMode, showLiveSimulator, showAudioRoomSimulator]);
 
-  // Bind video element to media stream
+  // Bind video element
   useEffect(() => {
     if (cameraStream && cameraPreviewRef.current) {
       cameraPreviewRef.current.srcObject = cameraStream;
     }
-  }, [cameraStream, activeMode, showLiveSimulator]);
+  }, [cameraStream, mainTab, showLiveSimulator]);
 
-  // Real-time live comments generation
+  // Live Comments simulator
   useEffect(() => {
     if (!showLiveSimulator) return;
 
@@ -144,22 +145,19 @@ export default function CreateModal({ onClose }: CreateModalProps) {
       'فيصل الرحال: تصوير ممتاز وبث مشوق جداً ☕️',
       'سارة المهندس: منور يا بطل، بالتوفيق في مشاريعك القادمة 💻🚀',
       'يوسف العتيبي: ما شاء الله، ربي يسعدك ويوفقك 🌟',
-      'عبدالله المطيري: هل هذا البث برعاية منصة نبض؟ 🤔',
       'ريم عبدالله: الإضاءة مذهلة جداً والفكرة جميلة جداً ✨',
-      'منار العتيبي: مبدع دائماً، استمر بمشاركة الأفكار 👍',
-      'خالد الحربي: كيف يمكنني الانضمام للتحدث معك؟ 🎙️',
-      'نورة السديري: رائع جداً! استمع بتركيز وشغف.'
+      'منار العتيبي: مبدع دائماً، استمر بمشاركة الأفكار 👍'
     ];
 
     const interval = setInterval(() => {
       const randomComment = mockComments[Math.floor(Math.random() * mockComments.length)];
       setLiveComments(prev => [...prev, randomComment].slice(-5));
-    }, 2800);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [showLiveSimulator]);
 
-  // Gemini AI text description generation
+  // Gemini generator
   const handleGenerateAiCaption = async () => {
     if (!aiPrompt.trim()) {
       alert('الرجاء إدخال فكرة موجزة أولاً لتوليد النص الذكي.');
@@ -192,10 +190,9 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     }
   };
 
-  // Flip Camera Logic
+  // Flip Camera
   const handleFlipCamera = () => {
     setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-    // Rotate viewfinder animation
     const preview = cameraPreviewRef.current;
     if (preview) {
       preview.classList.add('animate-spin');
@@ -203,17 +200,10 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     }
   };
 
-  // Sound selection
-  const handleSelectSound = (soundName: string) => {
-    setSelectedSound(soundName);
-    setShowSoundLibrary(false);
-  };
-
-  // Dynamic Record Hold / Click Action
+  // Record Trigger
   const startRecording = () => {
     if (isCountingDown) return;
 
-    // Check if countdown timer is set
     if (selectedTimer && !isRecording) {
       setIsCountdown(true);
       setCountdown(selectedTimer);
@@ -237,7 +227,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const actuallyStartRecording = () => {
     setIsRecording(true);
     setRecordingDuration(0);
-    const limitSec = activeMode === '15s' ? 15 : activeMode === '60s' ? 60 : 600;
+    const limitSec = videoDuration === '15s' ? 15 : videoDuration === '60s' ? 60 : 600;
 
     const interval = setInterval(() => {
       setRecordingDuration(prev => {
@@ -260,22 +250,35 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     setIsRecording(false);
   };
 
-  // Post creation handler
+  // Publish video post
   const handlePublishRecordedVideo = async () => {
     if (!currentUser) return;
     setIsUploading(true);
 
     try {
-      // Create short video post in Firestore
       const finalMedia = mediaUrl || 'https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4';
-      await createNewPost('video', textContent || 'مقطع فيديو قصير ورائع من كاميرا نبض الترند المباشرة 🎥✨', finalMedia, privacy, hashtags);
+      await createNewPost('video', textContent || 'مقطع فيديو قصير من منصة نبض الرقمية 🎥💫', finalMedia, privacy, hashtags);
       
-      setSuccessMsg('🎉 تم نشر مقطع الفيديو القصير بنجاح ومزامنته سحابياً!');
-      setTimeout(() => {
-        onClose();
-      }, 1200);
+      setSuccessMsg('🎉 تم النشر والمزامنة سحابياً بنجاح!');
+      setTimeout(() => onClose(), 1200);
     } catch (e) {
-      alert("حدث خطأ أثناء الاتصال بقاعدة البيانات.");
+      alert("حدث خطأ في المزامنة.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Publish Story
+  const handlePublishStory = async () => {
+    if (!currentUser) return;
+    setIsUploading(true);
+    try {
+      const finalMedia = mediaUrl || '/src/assets/images/post_scenic_1790855694074.jpg';
+      await createStory(finalMedia);
+      setSuccessMsg('🎉 تم إضافة القصة اليومية بنجاح لمتابعيك!');
+      setTimeout(() => onClose(), 1000);
+    } catch (e) {
+      alert("حدث خطأ.");
     } finally {
       setIsUploading(false);
     }
@@ -287,43 +290,36 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     if (!file) return;
     setIsUploading(true);
     try {
-      const isVideo = activeMode === '15s' || activeMode === '60s' || activeMode === '10m';
+      const isVideo = mainTab === 'video';
       const url = await uploadFileToStorage(file, isVideo ? 'videos' : 'images');
       setMediaUrl(url);
-      alert('تم رفع ملف الاستوديو بنجاح وحفظه في Firebase Storage! 🟢');
+      alert('تم رفع ملفك بنجاح للرفع السحابي! 🟢');
     } catch (err) {
-      console.error(err);
-      alert('فشل الرفع السحابي. يرجى مراجعة إعدادات الخصوصية.');
+      alert('فشل الرفع السحابي.');
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Handle Publish Text/Image Story or Post
-  const handlePublishContent = async (e: React.FormEvent) => {
+  // Publish standard text post
+  const handlePublishPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
     setIsUploading(true);
 
     try {
-      if (activeMode === 'text') {
-        if (!textContent.trim()) return alert('الرجاء كتابة النص أولاً.');
-        await createNewPost('text-image', textContent, mediaUrl, privacy, hashtags);
-      } else if (activeMode === 'image') {
-        await createStory(mediaUrl || '/src/assets/images/post_scenic_1790855694074.jpg');
-      }
-      setSuccessMsg('🎉 تم النشر والمزامنة بنجاح!');
-      setTimeout(() => {
-        onClose();
-      }, 1000);
+      if (!textContent.trim()) return alert('الرجاء كتابة المحتوى أولاً.');
+      await createNewPost('text-image', textContent, mediaUrl, privacy, hashtags);
+      setSuccessMsg('🎉 تم النشر والتحديث بنجاح!');
+      setTimeout(() => onClose(), 1000);
     } catch (err) {
-      alert('حدث خطأ في المزامنة السحابية.');
+      alert('حدث خطأ.');
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Initiate LIVE Stream in Database
+  // Create LIVE session in Database
   const handleStartLiveStream = async () => {
     if (!currentUser) return;
     const sessionId = `live_${Date.now()}`;
@@ -337,16 +333,15 @@ export default function CreateModal({ onClose }: CreateModalProps) {
         hostName: currentUser.displayName,
         hostAvatar: currentUser.avatar,
         timestamp: new Date().toISOString(),
-        streamKey: `stream_${Math.random().toString(36).substring(7)}`,
-        listeners: []
+        streamKey: `stream_${Math.random().toString(36).substring(7)}`
       });
       setShowLiveSimulator(true);
     } catch (err) {
-      console.error("Error creating LIVE:", err);
+      console.error(err);
     }
   };
 
-  // Initiate Audio Lounge Space in Database
+  // Create Audio Space session in Database
   const handleStartAudioRoom = async () => {
     if (!currentUser) return;
     const sessionId = `audio_${Date.now()}`;
@@ -359,13 +354,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
         hostUid: currentUser.uid,
         hostName: currentUser.displayName,
         hostAvatar: currentUser.avatar,
-        timestamp: new Date().toISOString(),
-        streamKey: `audio_${Math.random().toString(36).substring(7)}`,
-        listeners: []
+        timestamp: new Date().toISOString()
       });
       setShowAudioRoomSimulator(true);
     } catch (err) {
-      console.error("Error creating Audio Space:", err);
+      console.error(err);
     }
   };
 
@@ -383,19 +376,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     }, 2000);
   };
 
-  const handleAddHashtag = () => {
-    const trimmed = hashtagInput.trim().replace('#', '');
-    if (trimmed && !hashtags.includes(trimmed)) {
-      setHashtags([...hashtags, trimmed]);
-      setHashtagInput('');
-    }
-  };
-
-  const handleRemoveHashtag = (tagToRemove: string) => {
-    setHashtags(hashtags.filter(t => t !== tagToRemove));
-  };
-
-  // Get active CSS filter
   const getCameraFilterStyle = () => {
     const filterObj = CAMERA_EFFECTS.find(f => f.id === activeFilter);
     let styleStr = filterObj ? filterObj.filter : '';
@@ -408,21 +388,19 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black md:max-w-lg md:mx-auto md:rounded-3xl overflow-hidden shadow-2xl font-cairo">
       
-      {/* ===================== VIEW A: TEXT MODE EDITOR ===================== */}
-      {activeMode === 'text' && (
+      {/* ===================== VIEW 1: POST MODE (منشور) ===================== */}
+      {mainTab === 'post' && (
         <div className="absolute inset-0 bg-gradient-to-tr from-[#120c1f] via-[#0b0f19] to-brand-primary/20 flex flex-col justify-between p-6 z-10 text-right">
           
-          {/* Header */}
           <div className="flex items-center justify-between">
-            <button onClick={onClose} className="p-2.5 bg-slate-900/40 hover:bg-slate-900/70 border border-slate-800 rounded-full text-slate-300">
+            <button onClick={onClose} className="p-2.5 bg-slate-900/40 hover:bg-slate-900/70 border border-slate-800 rounded-full text-white">
               <X className="w-5 h-5" />
             </button>
-            <span className="text-sm font-extrabold text-white">منشور نصي سحابي</span>
+            <span className="text-sm font-extrabold text-white">منشور نصي وصور</span>
             <div className="w-10 h-10" />
           </div>
 
-          {/* Text Form */}
-          <form onSubmit={handlePublishContent} className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full space-y-6">
+          <form onSubmit={handlePublishPost} className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full space-y-6">
             
             {successMsg && (
               <div className="p-3 bg-emerald-950/40 border border-emerald-800 text-emerald-400 text-xs rounded-xl text-center font-bold">
@@ -430,10 +408,10 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               </div>
             )}
 
-            {/* AI Writing Assistant */}
+            {/* AI Caption generator */}
             <div className="p-4 bg-slate-950/50 border border-brand-primary/10 rounded-2xl space-y-2">
               <div className="flex items-center gap-1.5 justify-end">
-                <span className="text-xs font-bold text-white">مساعد الكتابة الذكي بـ Gemini 🔮</span>
+                <span className="text-xs font-bold text-white">توليد الوصف بالذكاء الاصطناعي 🔮</span>
                 <Sparkles className="w-4 h-4 text-brand-primary animate-pulse" />
               </div>
               <div className="flex gap-2">
@@ -441,16 +419,16 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                   type="button"
                   onClick={handleGenerateAiCaption}
                   disabled={isGenerating}
-                  className="px-3 bg-brand-primary text-white text-xs font-bold rounded-xl hover:opacity-95 active:scale-95 transition-all disabled:opacity-50"
+                  className="px-3 bg-brand-primary text-white text-xs font-bold rounded-xl"
                 >
-                  {isGenerating ? 'جاري صياغته...' : 'توليد ✨'}
+                  {isGenerating ? 'صياغة...' : 'ولد ✨'}
                 </button>
                 <input
                   type="text"
                   placeholder="مثال: وصف فنجان قهوة الصباح والهدوء..."
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
-                  className="flex-1 h-9 px-3 bg-slate-900 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right"
+                  className="flex-1 h-9 px-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white text-right focus:outline-none"
                 />
               </div>
             </div>
@@ -460,35 +438,10 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               value={textContent}
               onChange={(e) => setContent(e.target.value)}
               rows={4}
-              maxLength={280}
               className="w-full p-4 bg-transparent border-none focus:outline-none text-base text-slate-100 text-center leading-relaxed font-bold placeholder-slate-500 resize-none"
             />
 
-            <div className="flex flex-col space-y-4">
-              {/* Hashtags adding */}
-              <div className="space-y-1">
-                <div className="flex gap-2">
-                  <button type="button" onClick={handleAddHashtag} className="h-9 px-3 bg-slate-850 hover:bg-slate-800 rounded-xl text-xs font-bold text-brand-secondary">أضف +</button>
-                  <input
-                    type="text"
-                    placeholder="طبيعة، برمجة..."
-                    value={hashtagInput}
-                    onChange={(e) => setHashtagInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddHashtag(); } }}
-                    className="flex-1 h-9 px-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 text-right"
-                  />
-                </div>
-                <div className="flex flex-wrap flex-row-reverse gap-1.5 pt-1">
-                  {hashtags.map((tag, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-300">
-                      <button type="button" onClick={() => handleRemoveHashtag(tag)} className="text-red-400 font-bold">×</button>
-                      <span>#{tag}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Privacy Toggle */}
+            <div className="space-y-4">
               <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-xl border border-slate-850">
                 <select
                   value={privacy}
@@ -499,63 +452,63 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                   <option value="followers" className="bg-slate-900 text-slate-200">المتابعين فقط 👥</option>
                   <option value="private" className="bg-slate-900 text-slate-200">خاص بي 🔒</option>
                 </select>
-                <span className="text-xs text-slate-400 font-semibold">مستوى الرؤية</span>
+                <span className="text-xs text-slate-400 font-semibold">الرؤية والخصوصية</span>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isUploading}
-              className="w-full h-12 rounded-xl bg-gradient-to-l from-brand-primary to-brand-gradient-start hover:opacity-95 text-white text-xs font-bold active:scale-[0.98] transition-all flex items-center justify-center shadow-lg shadow-brand-primary/20"
+              className="w-full h-12 rounded-xl bg-gradient-to-l from-brand-primary to-brand-gradient-start hover:opacity-95 text-white text-xs font-bold transition-all shadow-lg"
             >
-              {isUploading ? 'جاري نشر المنشور...' : 'انشر الآن على التغذية 🚀'}
+              {isUploading ? 'جاري النشر...' : 'انشر الآن على التغذية 🚀'}
             </button>
           </form>
 
-          {/* Mode Switcher */}
-          <ModeSelector activeMode={activeMode} onChange={setActiveMode} />
+          {/* Bottom Tabs Switcher */}
+          <TabsSwitcher activeTab={mainTab} onChange={setMainTab} />
 
         </div>
       )}
 
-      {/* ===================== VIEW B: EXACT TIKTOK CAMERA VIEWFINDER ===================== */}
-      {activeMode !== 'text' && (
+      {/* ===================== VIEW 2: FULL CAMERA VIEWFINDER (فيديو, قصة, بث) ===================== */}
+      {mainTab !== 'post' && (
         <div className="absolute inset-0 bg-black flex flex-col justify-between z-0">
           
-          {/* Real Live HTML5 Camera Video Element */}
+          {/* Camera Viewfinder */}
           <div className="absolute inset-0 z-0">
-            {permissionError ? (
+            {permissionError && mainTab !== 'audio_room' ? (
               <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-8 text-center space-y-4">
                 <AlertCircle className="w-12 h-12 text-red-500 animate-bounce" />
-                <h3 className="text-base font-extrabold text-white">أذونات الكاميرا والمايكروفون مطلوبة 🚫</h3>
+                <h3 className="text-base font-extrabold text-white">تفعيل الوصول للكاميرا مطلوب 🚫</h3>
                 <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-                  لم تتمكن منصة نبض من الوصول لعدسة كاميرا جوالك أو المايكروفون. يرجى تفعيل الأذونات من إعدادات المتصفح للتمتع بالتجربة الحية.
+                  الرجاء تفعيل إذن الوصول للكاميرا والمايكروفون من إعدادات المتصفح للتمكن من التقاط ومشاركة فيديوهاتك المباشرة وسرد قصصك.
                 </p>
                 <label
-                  htmlFor="camera-picker-file"
-                  className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold cursor-pointer"
+                  htmlFor="camera-upload-btn"
+                  className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold cursor-pointer hover:opacity-95"
                 >
-                  تصفح ورفع ملف مباشرة بدلاً من ذلك 📁
+                  رفع ملف من الاستوديو كبديل 📁
                 </label>
               </div>
             ) : (
-              <video
-                ref={cameraPreviewRef}
-                autoPlay
-                playsInline
-                muted={isMuted}
-                className="w-full h-full object-cover transition-transform duration-700"
-                style={{ 
-                  transform: facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)',
-                  filter: getCameraFilterStyle()
-                }}
-              />
+              mainTab !== 'audio_room' && (
+                <video
+                  ref={cameraPreviewRef}
+                  autoPlay
+                  playsInline
+                  muted={isMuted}
+                  className="w-full h-full object-cover transition-transform duration-700"
+                  style={{ 
+                    transform: facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)',
+                    filter: getCameraFilterStyle()
+                  }}
+                />
+              )
             )}
             
-            {/* Viewfinder Vignette Overlay */}
             <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 pointer-events-none" />
             
-            {/* Countdown Big Overlay */}
             {countdown !== null && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-30">
                 <span className="text-7xl font-extrabold text-brand-primary animate-ping">{countdown}</span>
@@ -572,14 +525,15 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               <X className="w-5 h-5" />
             </button>
 
-            {/* Sound Selector library button (TikTok precise styling) */}
-            <button
-              onClick={() => setShowSoundLibrary(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full hover:bg-black/60 text-white text-xs font-bold transition-all"
-            >
-              <Music className="w-3.5 h-3.5 text-brand-secondary fill-current animate-pulse" />
-              <span className="truncate max-w-[120px]">{selectedSound || 'إضافة صوت 🎵'}</span>
-            </button>
+            {mainTab === 'video' && (
+              <button
+                onClick={() => setShowSoundLibrary(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white text-xs font-bold"
+              >
+                <Music className="w-3.5 h-3.5 text-brand-secondary fill-current animate-pulse" />
+                <span className="truncate max-w-[120px]">{selectedSound || 'إضافة صوت 🎵'}</span>
+              </button>
+            )}
 
             <button
               onClick={() => setIsMuted(!isMuted)}
@@ -590,98 +544,86 @@ export default function CreateModal({ onClose }: CreateModalProps) {
           </div>
 
           {/* ======================= FLOATING SIDEBAR (RIGHT COLUMN) ======================= */}
-          <div className="absolute top-20 right-4 z-20 flex flex-col gap-4">
-            
-            {/* Flip Camera */}
-            <button 
-              onClick={handleFlipCamera}
-              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
-            >
-              <div className="p-3 bg-black/35 backdrop-blur-md rounded-full hover:bg-black/50 border border-white/5 active:scale-95 transition-all">
-                <RotateCw className="w-5 h-5" />
-              </div>
-              <span>قلب</span>
-            </button>
+          {mainTab !== 'audio_room' && (
+            <div className="absolute top-20 right-4 z-20 flex flex-col gap-4">
+              <button onClick={handleFlipCamera} className="flex flex-col items-center gap-1 text-white text-[10px] font-bold">
+                <div className="p-3 bg-black/35 backdrop-blur-md rounded-full border border-white/5 active:scale-95 transition-all">
+                  <RotateCw className="w-5 h-5" />
+                </div>
+                <span>قلب</span>
+              </button>
 
-            {/* Speed selection */}
-            <button 
-              onClick={() => setSpeedMultiplier(prev => prev === '1x' ? '2x' : prev === '2x' ? '0.5x' : '1x')}
-              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
-            >
-              <div className="p-3 bg-black/35 backdrop-blur-md rounded-full hover:bg-black/50 border border-white/5 active:scale-95 transition-all">
-                <span className="text-[11px] font-mono font-extrabold text-brand-secondary">{speedMultiplier}</span>
-              </div>
-              <span>السرعة</span>
-            </button>
+              <button onClick={() => setSpeedMultiplier(prev => prev === '1x' ? '2x' : prev === '2x' ? '0.5x' : '1x')} className="flex flex-col items-center gap-1 text-white text-[10px] font-bold">
+                <div className="p-3 bg-black/35 backdrop-blur-md rounded-full border border-white/5 active:scale-95 transition-all">
+                  <span className="text-[11px] font-mono font-extrabold text-brand-secondary">{speedMultiplier}</span>
+                </div>
+                <span>السرعة</span>
+              </button>
 
-            {/* Filters Tray toggle */}
-            <button 
-              onClick={() => setShowFiltersTray(!showFiltersTray)}
-              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
-            >
-              <div className={`p-3 rounded-full backdrop-blur-md border border-white/5 active:scale-95 transition-all ${
-                activeFilter !== 'none' ? 'bg-brand-primary text-white' : 'bg-black/35 text-white hover:bg-black/50'
-              }`}>
-                <Sliders className="w-5 h-5" />
-              </div>
-              <span>الفلاتر</span>
-            </button>
+              <button onClick={() => setShowFiltersTray(!showFiltersTray)} className="flex flex-col items-center gap-1 text-white text-[10px] font-bold">
+                <div className={`p-3 rounded-full backdrop-blur-md border border-white/5 active:scale-95 transition-all ${activeFilter !== 'none' ? 'bg-brand-primary' : 'bg-black/35'}`}>
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <span>الفلاتر</span>
+              </button>
 
-            {/* Face Enhancement Beauty Mode Toggle */}
-            <button 
-              onClick={() => setIsBeautyEnabled(!isBeautyEnabled)}
-              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
-            >
-              <div className={`p-3 rounded-full backdrop-blur-md border border-white/5 active:scale-95 transition-all ${
-                isBeautyEnabled ? 'bg-emerald-500 text-white' : 'bg-black/35 text-white hover:bg-black/50'
-              }`}>
-                <Sparkle className="w-5 h-5" />
-              </div>
-              <span>تحسين</span>
-            </button>
+              <button onClick={() => setIsBeautyEnabled(!isBeautyEnabled)} className="flex flex-col items-center gap-1 text-white text-[10px] font-bold">
+                <div className={`p-3 rounded-full backdrop-blur-md border border-white/5 active:scale-95 transition-all ${isBeautyEnabled ? 'bg-emerald-500' : 'bg-black/35'}`}>
+                  <Sparkle className="w-5 h-5" />
+                </div>
+                <span>تحسين</span>
+              </button>
+            </div>
+          )}
 
-            {/* Countdown timer toggle */}
-            <button 
-              onClick={() => setSelectedTimer(prev => prev === 3 ? 10 : 3)}
-              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
-            >
-              <div className="p-3 bg-black/35 backdrop-blur-md rounded-full hover:bg-black/50 border border-white/5 active:scale-95 transition-all text-brand-primary font-mono text-[11px] font-extrabold">
-                {selectedTimer}s
-              </div>
-              <span>المؤقت</span>
-            </button>
-
-          </div>
-
-          {/* ======================= BOTTOM PANEL & CAPTURE CONTROLS ======================= */}
+          {/* ======================= BOTTOM PANEL CONTROLS ======================= */}
           <div className="relative z-10 flex flex-col space-y-4 pb-6">
             
-            {/* If we have captured media or files - show a publish card overlay inside viewfinder */}
+            {/* 1. Captured File preview publish form */}
             {mediaUrl && (
               <div className="mx-4 p-4 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-3xl space-y-3 shadow-2xl text-right animate-slideUp">
                 <div className="flex justify-between items-center">
-                  <button onClick={() => setMediaUrl('')} className="text-[10px] text-red-400 font-bold hover:underline">إلغاء وإعادة المحاولة 🗑️</button>
-                  <span className="text-xs font-extrabold text-white">جاهز للنشر والمزامنة السحابية</span>
+                  <button onClick={() => setMediaUrl('')} className="text-[10px] text-red-400 font-bold">إلغاء المقطع الحالي 🗑️</button>
+                  <span className="text-xs font-extrabold text-white">مقطعك جاهز للنشر السحابي</span>
                 </div>
                 <textarea
                   placeholder="أدخل عنواناً جذاباً ووصفاً مميزاً للمقطع..."
                   value={textContent}
                   onChange={(e) => setContent(e.target.value)}
                   rows={2}
-                  className="w-full p-2 bg-slate-950 border border-slate-800 focus:outline-none rounded-xl text-xs text-slate-200 text-right leading-relaxed"
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 focus:outline-none rounded-xl text-xs text-white text-right"
                 />
                 <button
-                  onClick={handlePublishRecordedVideo}
+                  onClick={mainTab === 'story' ? handlePublishStory : handlePublishRecordedVideo}
                   disabled={isUploading}
                   className="w-full h-11 bg-brand-primary text-white text-xs font-bold rounded-xl active:scale-95 transition-all"
                 >
-                  {isUploading ? 'جاري رفع ونشر الفيديو...' : 'انشر الآن على التغذية 🚀'}
+                  {isUploading ? 'جاري الحفظ والمزامنة السحابية...' : 'انشر الآن للجميع 🚀'}
                 </button>
               </div>
             )}
 
-            {/* LIVE setup form overlay */}
-            {activeMode === 'live' && !showLiveSimulator && (
+            {/* 2. VIDEO mode setup: Secondary duration selector directly above record button */}
+            {mainTab === 'video' && !mediaUrl && (
+              <div className="flex justify-center gap-4 text-center select-none pb-2">
+                {(['15s', '60s', '10m'] as VideoDurationType[]).map(dur => (
+                  <button
+                    key={dur}
+                    onClick={() => setVideoDuration(dur)}
+                    className={`px-3 py-1 text-[11px] font-extrabold rounded-full transition-all ${
+                      videoDuration === dur ? 'bg-brand-primary text-white scale-105' : 'bg-black/40 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {dur === '15s' && '15 ثانية'}
+                    {dur === '60s' && '60 ثانية'}
+                    {dur === '10m' && '10 دقائق'}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 3. LIVE setup form overlay */}
+            {mainTab === 'live' && !showLiveSimulator && (
               <div className="mx-4 p-5 bg-slate-950/90 border border-slate-850 rounded-3xl space-y-4 text-right shadow-xl">
                 <h3 className="text-xs font-extrabold text-white">إطلاق البث المباشر التفاعلي</h3>
                 <div className="space-y-1.5">
@@ -690,20 +632,20 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                     type="text"
                     value={liveTitle}
                     onChange={(e) => setLiveTitle(e.target.value)}
-                    className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right"
+                    className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right focus:outline-none"
                   />
                 </div>
                 <button
                   onClick={handleStartLiveStream}
-                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/10"
+                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-lg"
                 >
                   ابدأ البث المباشر والربط السحابي 🔴
                 </button>
               </div>
             )}
 
-            {/* Audio room setup form overlay */}
-            {activeMode === 'audio_room' && !showAudioRoomSimulator && (
+            {/* 4. AUDIO ROOM setup form overlay */}
+            {mainTab === 'audio_room' && !showAudioRoomSimulator && (
               <div className="mx-4 p-5 bg-slate-950/90 border border-slate-850 rounded-3xl space-y-4 text-right shadow-xl">
                 <h3 className="text-xs font-extrabold text-white">إطلاق مجلس حواري صوتي</h3>
                 <div className="space-y-3">
@@ -713,7 +655,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                       type="text"
                       value={audioRoomName}
                       onChange={(e) => setAudioRoomName(e.target.value)}
-                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right"
+                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right focus:outline-none"
                     />
                   </div>
                   <div className="space-y-1">
@@ -722,7 +664,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                       type="number"
                       value={audioSpeakersCount}
                       onChange={(e) => setAudioSpeakersCount(e.target.value)}
-                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right"
+                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right focus:outline-none"
                     />
                   </div>
                 </div>
@@ -741,32 +683,32 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                 <div className="w-full bg-slate-900/60 h-2 rounded-full overflow-hidden border border-white/5">
                   <div 
                     className="bg-brand-primary h-full rounded-full transition-all duration-100" 
-                    style={{ width: `${(recordingDuration / (activeMode === '15s' ? 15 : activeMode === '60s' ? 60 : 600)) * 100}%` }}
+                    style={{ width: `${(recordingDuration / (videoDuration === '15s' ? 15 : videoDuration === '60s' ? 60 : 600)) * 100}%` }}
                   />
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono mt-1">
-                  <span>{activeMode === '15s' ? '15.0s' : activeMode === '60s' ? '60.0s' : '10m'}</span>
+                  <span>{videoDuration === '15s' ? '15.0s' : videoDuration === '60s' ? '60.0s' : '10m'}</span>
                   <span className="text-white font-bold">{recordingDuration.toFixed(1)}s</span>
                 </div>
               </div>
             )}
 
             {/* ======================= CAPTURE ACTIONS ROW ======================= */}
-            {!mediaUrl && activeMode !== 'live' && activeMode !== 'audio_room' && (
+            {!mediaUrl && mainTab !== 'live' && mainTab !== 'audio_room' && (
               <div className="flex items-center justify-around px-8">
                 
-                {/* Effects Menu trigger */}
+                {/* Effects tray trigger */}
                 <button 
                   onClick={() => setShowFiltersTray(true)}
                   className="flex flex-col items-center gap-1.5 focus:outline-none"
                 >
-                  <div className="w-12 h-12 bg-white/15 hover:bg-white/25 rounded-xl border border-white/10 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all shadow-lg">
-                    <Smile className="w-6 h-6 text-yellow-300" />
+                  <div className="w-12 h-12 bg-white/15 hover:bg-white/25 rounded-xl border border-white/10 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all">
+                    <Smile className="w-6 h-6 text-yellow-300 animate-bounce" />
                   </div>
-                  <span className="text-[10px] text-white font-bold">المؤثرات</span>
+                  <span className="text-[10px] text-white font-bold">مؤثرات</span>
                 </button>
 
-                {/* Big TikTok Central Capture Button */}
+                {/* Big Shutter Record Button */}
                 <div className="relative">
                   <button
                     type="button"
@@ -781,17 +723,17 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                   </button>
                 </div>
 
-                {/* Gallery Upload (natively triggers mobile input file picker) */}
+                {/* Upload Gallery files */}
                 <div className="flex flex-col items-center gap-1.5">
                   <label 
-                    htmlFor="camera-picker-file"
-                    className="w-12 h-12 bg-white/15 hover:bg-white/25 rounded-xl border border-white/10 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all cursor-pointer shadow-lg"
+                    htmlFor="camera-upload-btn"
+                    className="w-12 h-12 bg-white/15 hover:bg-white/25 rounded-xl border border-white/10 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all cursor-pointer"
                   >
                     <UploadCloud className="w-6 h-6 text-brand-secondary" />
                   </label>
                   <input
                     type="file"
-                    id="camera-picker-file"
+                    id="camera-upload-btn"
                     accept="image/*,video/*"
                     onChange={handleGalleryUpload}
                     className="hidden"
@@ -802,9 +744,9 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               </div>
             )}
 
-            {/* Mode Selector horizontal line */}
+            {/* Core 5 Horizontal Selector tabs */}
             {!mediaUrl && !showLiveSimulator && !showAudioRoomSimulator && (
-              <ModeSelector activeMode={activeMode} onChange={setActiveMode} />
+              <TabsSwitcher activeTab={mainTab} onChange={setMainTab} />
             )}
 
           </div>
@@ -824,20 +766,20 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             {TIKTOK_SOUNDS.map(sound => (
               <div 
                 key={sound.id}
-                onClick={() => handleSelectSound(sound.name)}
-                className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl hover:border-brand-primary flex items-center justify-between cursor-pointer transition-colors"
+                onClick={() => { setSelectedSound(sound.name); setShowSoundLibrary(false); }}
+                className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl hover:border-brand-primary flex items-center justify-between cursor-pointer transition-colors animate-slideUp"
               >
                 <span className="text-xs text-slate-500 font-mono">{sound.duration}</span>
                 <div className="text-right">
                   <h4 className="text-xs font-bold text-white">{sound.name}</h4>
-                  <p className="text-[10px] text-slate-400">@{sound.artist}</p>
+                  <p className="text-[10px] text-slate-400 font-semibold">@{sound.artist}</p>
                 </div>
               </div>
             ))}
           </div>
 
           <button 
-            onClick={() => handleSelectSound('')}
+            onClick={() => { setSelectedSound(null); setShowSoundLibrary(false); }}
             className="w-full h-11 bg-slate-850 hover:bg-slate-800 rounded-xl text-xs text-slate-300 font-semibold"
           >
             إزالة الصوت المختار
@@ -875,19 +817,17 @@ export default function CreateModal({ onClose }: CreateModalProps) {
       {showLiveSimulator && (
         <div className="fixed inset-0 z-[150] flex flex-col bg-slate-950 text-white p-4">
           
-          {/* Real Live Video Feed background */}
           <div className="absolute inset-0 z-0 bg-black">
             <video
               ref={cameraPreviewRef}
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover opacity-75"
+              className="w-full h-full object-cover opacity-75 animate-pulse"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50" />
           </div>
 
-          {/* Floating Hearts rising animation placeholder */}
           {liveHearts.map(heart => (
             <div
               key={heart.id}
@@ -898,12 +838,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             </div>
           ))}
 
-          {/* Top Bar info */}
           <div className="relative z-10 flex items-center justify-between mt-2 px-2">
             <button
               onClick={() => {
                 setShowLiveSimulator(false);
-                setActiveMode('15s');
+                setMainTab('video');
               }}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-xs font-bold rounded-xl transition-all shadow-md active:scale-95"
             >
@@ -916,13 +855,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             </div>
           </div>
 
-          {/* Title description in top-right */}
           <div className="relative z-10 text-right mt-6 px-2 space-y-1">
             <h3 className="text-sm font-extrabold text-white">{liveTitle}</h3>
             <span className="text-[10px] text-brand-secondary font-bold bg-brand-secondary/15 px-2.5 py-0.5 rounded-md inline-block">#{liveCategory}</span>
           </div>
 
-          {/* Comments list panel */}
           <div className="mt-auto relative z-10 p-3 space-y-2.5">
             <div className="max-h-48 overflow-y-auto space-y-2 flex flex-col justify-end">
               {liveComments.map((comment, i) => (
@@ -932,7 +869,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               ))}
             </div>
 
-            {/* Bottom Row action interactions */}
             <div className="flex items-center gap-2 pt-2">
               <button 
                 onClick={handleAddLiveHeart}
@@ -959,12 +895,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
 
       {/* ===================== VIEW F: AUDIO SPACE STUDIO ===================== */}
       {showAudioRoomSimulator && (
-        <div className="fixed inset-0 z-[150] flex flex-col bg-[#0b0c16] text-white p-6 justify-between">
+        <div className="fixed inset-0 z-[150] flex flex-col bg-[#0b0c16] text-white p-6 justify-between animate-slideUp">
           
-          {/* Header */}
           <div className="flex justify-between items-center border-b border-slate-900 pb-4">
             <button 
-              onClick={() => { setShowAudioRoomSimulator(false); setActiveMode('15s'); }}
+              onClick={() => { setShowAudioRoomSimulator(false); setMainTab('video'); }}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl"
             >
               غادر بهدوء 👋
@@ -975,11 +910,9 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             </div>
           </div>
 
-          {/* Speakers Grid representation */}
           <div className="flex-1 flex flex-col justify-center items-center py-6 space-y-6">
             <div className="grid grid-cols-3 gap-6 max-w-sm w-full">
               
-              {/* Host Speaker */}
               <div className="flex flex-col items-center text-center space-y-1">
                 <div className="relative p-1 rounded-full border-2 border-brand-primary animate-pulse">
                   <img src={currentUser?.avatar || '/src/assets/images/avatar_premium_1790855716859.jpg'} className="w-14 h-14 rounded-full object-cover" />
@@ -988,7 +921,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                 <span className="text-[10px] font-bold text-white truncate max-w-[64px]">{currentUser?.displayName || 'أنت'}</span>
               </div>
 
-              {/* Guest 1 */}
               <div className="flex flex-col items-center text-center space-y-1">
                 <div className="relative p-1 rounded-full border border-brand-secondary">
                   <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150" className="w-14 h-14 rounded-full object-cover" />
@@ -997,7 +929,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                 <span className="text-[10px] font-bold text-slate-300">سارة المهندس</span>
               </div>
 
-              {/* Guest 2 */}
               <div className="flex flex-col items-center text-center space-y-1">
                 <div className="relative p-1 rounded-full border border-slate-700">
                   <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150" className="w-14 h-14 rounded-full object-cover" />
@@ -1013,7 +944,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               <span className="text-[9px] text-slate-500 block font-mono">الحد الأقصى للمستمعين: {audioSpeakersCount} / 25 مستمع</span>
             </div>
 
-            {/* Waveform graphic */}
             <div className="flex items-center gap-1 h-12">
               <span className="w-1 h-8 bg-brand-primary rounded-full animate-pulse" />
               <span className="w-1 h-12 bg-brand-secondary rounded-full animate-pulse delay-75" />
@@ -1023,7 +953,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             </div>
           </div>
 
-          {/* Space Controls (Mute / mic options) */}
           <div className="flex items-center justify-around bg-slate-950/40 p-4 rounded-3xl border border-slate-900">
             <button 
               onClick={() => setIsMicMuted(!isMicMuted)}
@@ -1043,38 +972,36 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   );
 }
 
-// Sub Component: Horizontal Scrolling Mode Selector
-interface ModeSelectorProps {
-  activeMode: ModeType;
-  onChange: (mode: ModeType) => void;
+// Sub Component: Bottom core 5 tabs Switcher
+interface TabsSwitcherProps {
+  activeTab: MainTabType;
+  onChange: (tab: MainTabType) => void;
 }
 
-function ModeSelector({ activeMode, onChange }: ModeSelectorProps) {
-  const modesList: { id: ModeType; name: string }[] = [
-    { id: 'text', name: 'نص ✍️' },
-    { id: 'image', name: 'صورة 💫' },
-    { id: '15s', name: '15 ثانية ⏱️' },
-    { id: '60s', name: '60 ثانية ⏱️' },
-    { id: '10m', name: '10 دقائق ⏱️' },
-    { id: 'live', name: 'LIVE 🔴' },
-    { id: 'audio_room', name: 'المجلس 🎤' }
+function TabsSwitcher({ activeTab, onChange }: TabsSwitcherProps) {
+  const tabsList: { id: MainTabType; name: string }[] = [
+    { id: 'video', name: 'فيديو 🎥' },
+    { id: 'post', name: 'منشور ✍️' },
+    { id: 'story', name: 'قصة 💫' },
+    { id: 'live', name: 'بث مباشر 🔴' },
+    { id: 'audio_room', name: 'غرفة صوتية 🎤' }
   ];
 
   return (
-    <div className="w-full overflow-x-auto no-scrollbar py-2 text-center select-none">
-      <div className="flex flex-row-reverse items-center justify-center gap-5 px-6 whitespace-nowrap">
-        {modesList.map(mode => (
+    <div className="w-full overflow-x-auto no-scrollbar py-2 text-center select-none bg-black/60 border-t border-white/5">
+      <div className="flex flex-row-reverse items-center justify-center gap-6 px-6 whitespace-nowrap">
+        {tabsList.map(tab => (
           <button
-            key={mode.id}
+            key={tab.id}
             type="button"
-            onClick={() => onChange(mode.id)}
-            className={`text-xs font-extrabold pb-1 transition-all ${
-              activeMode === mode.id 
-                ? 'text-brand-primary border-b-2 border-brand-primary scale-105' 
+            onClick={() => onChange(tab.id)}
+            className={`text-xs font-extrabold pb-1.5 px-1.5 transition-all ${
+              activeTab === tab.id 
+                ? 'text-brand-primary border-b-2 border-brand-primary scale-110 font-bold' 
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            {mode.name}
+            {tab.name}
           </button>
         ))}
       </div>
