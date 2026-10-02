@@ -2,124 +2,142 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Video, Radio, Mic, BookOpen, FileText, Image as ImageIcon, 
-  X, Lock, Globe, Users, Plus, Sparkles, CheckCircle, UploadCloud, AlertCircle, ArrowRight
+  X, Lock, Globe, Users, Plus, Sparkles, CheckCircle, UploadCloud, 
+  AlertCircle, ArrowRight, RotateCw, Sparkle, Smile, Sliders, Volume2, 
+  Tv, Compass, HelpCircle, Send, Music, HelpCircle as HelpIcon, Play, Pause, Flame
 } from 'lucide-react';
+import { db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface CreateModalProps {
   onClose: () => void;
 }
 
-type CreateTab = 'video' | 'live' | 'audio_room' | 'story' | 'post';
+type ModeType = 'text' | 'image' | '15s' | '60s' | '10m' | 'live' | 'audio_room';
 
-import { db } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+const TIKTOK_SOUNDS = [
+  { id: 's1', name: 'نبض الترند - موسيقى حماسية 🔥', artist: 'برعاية نبض', duration: '0:15' },
+  { id: 's2', name: 'هدوء الطبيعة والبر 🌌', artist: 'سفر واسترخاء', duration: '0:30' },
+  { id: 's3', name: 'ذكاء اصطناعي لو-فاي 💻', artist: 'سارة المهندس', duration: '0:45' },
+  { id: 's4', name: 'صوت صب القهوة المختصة ☕️', artist: 'فيصل الرحال', duration: '0:10' }
+];
+
+const CAMERA_EFFECTS = [
+  { id: 'none', name: 'طبيعي ✨', filter: '' },
+  { id: 'vintage', name: 'عتيق كلاسيك 📼', filter: 'sepia(0.5) contrast(1.1)' },
+  { id: 'noir', name: 'أبيض وأسود 🎬', filter: 'grayscale(1) contrast(1.2)' },
+  { id: 'cyberpunk', name: 'سايبر بانك 🌌', filter: 'hue-rotate(140deg) saturate(1.6)' },
+  { id: 'vibrant', name: 'ألوان مشبعة 🎨', filter: 'saturate(1.5) contrast(1.05)' }
+];
 
 export default function CreateModal({ onClose }: CreateModalProps) {
   const { createNewPost, createStory, currentUser, uploadFileToStorage } = useApp();
-  
-  // High-fidelity flow: First select the isolated type, then open its custom form!
-  const [selectedMode, setSelectedMode] = useState<CreateTab | null>(null);
-  
-  // Real File Upload handler
-  const handleRealFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
-    try {
-      const url = await uploadFileToStorage(file, selectedMode === 'video' ? 'videos' : 'images');
-      setMediaUrl(url);
-      alert('تم رفع الملف بنجاح وتوليد الرابط وحفظه في Firebase Storage! 🟢');
-    } catch (err) {
-      console.error(err);
-      alert('فشل رفع الملف إلى المستودع السحابي. يرجى مراجعة إعدادات الأمان في Firebase.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-  
-  // Form State
-  const [content, setContent] = useState('');
-  const [mediaUrl, setMediaUrl] = useState('');
-  const [privacy, setPrivacy] = useState<'public' | 'followers' | 'private'>('public');
-  const [hashtagInput, setHashtagInput] = useState('');
-  const [hashtags, setHashtags] = useState(['نبض', 'جديد']);
 
-  // Holding Video Record State
+  // Mode Selection State
+  const [activeMode, setActiveMode] = useState<ModeType>('15s');
+
+  // Hardware permission & media stream state
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [permissionError, setPermissionError] = useState<boolean>(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  
+  const cameraPreviewRef = useRef<HTMLVideoElement>(null);
+
+  // TikTok Tool States
+  const [selectedSound, setSelectedSound] = useState<string | null>(null);
+  const [showSoundLibrary, setShowSoundLibrary] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('none');
+  const [showFiltersTray, setShowFiltersTray] = useState(false);
+  const [speedMultiplier, setSpeedMultiplier] = useState<'0.5x' | '1x' | '2x'>('1x');
+  const [isBeautyEnabled, setIsBeautyEnabled] = useState(false);
+  const [isFlashEnabled, setIsFlashEnabled] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  
+  // Timer States
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [isCountingDown, setIsCountdown] = useState(false);
+  const [selectedTimer, setSelectedTimer] = useState<3 | 10>(3);
+
+  // Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Live Stream State
+
+  // File picker / Content post states
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [textContent, setContent] = useState('');
+  const [privacy, setPrivacy] = useState<'public' | 'followers' | 'private'>('public');
+  const [hashtags, setHashtags] = useState<string[]>(['نبض', 'ترند']);
+  const [hashtagInput, setHashtagInput] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // LIVE simulator states
+  const [showLiveSimulator, setShowLiveSimulator] = useState(false);
   const [liveTitle, setLiveTitle] = useState('بث مباشر تفاعلي لمشاركة اللحظة ⚡️');
   const [liveCategory, setLiveCategory] = useState('ألعاب ومناقشات');
-  
-  // Live Simulator state for dynamic hearts and scrolling comments
-  const [showLiveSimulator, setShowLiveSimulator] = useState(false);
-  const [showAudioRoomSimulator, setShowAudioRoomSimulator] = useState(false);
-  const [isMicMuted, setIsMicMuted] = useState(false);
   const [liveHearts, setLiveHearts] = useState<{ id: number; left: number; emoji: string }[]>([]);
   const [liveComments, setLiveComments] = useState<string[]>([
     'خالد الحربي: السلام عليكم يا مبدع، منور البث! 👋',
     'أمل الشمري: موضوع رائع جداً ومفيد للجميع ✨',
   ]);
 
-  // Real Camera and Microphone Stream State
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const cameraPreviewRef = useRef<HTMLVideoElement>(null);
+  // Audio room states
+  const [showAudioRoomSimulator, setShowAudioRoomSimulator] = useState(false);
+  const [audioRoomName, setAudioRoomName] = useState('مجلس نبض الثقافي والتقني 🎤');
+  const [audioSpeakersCount, setAudioSpeakersCount] = useState('5');
+  const [isMicMuted, setIsMicMuted] = useState(false);
 
+  // Gemini AI Prompt
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Trigger media stream on entry or mode change
   useEffect(() => {
-    if (selectedMode === 'video' || selectedMode === 'live') {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
-          setCameraStream(stream);
-        })
-        .catch(err => {
-          console.warn("Camera/Microphone access was denied or unavailable:", err);
-        });
-    } else if (selectedMode === 'audio_room') {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => {
-          setCameraStream(stream);
-        })
-        .catch(err => {
-          console.warn("Microphone access was denied or unavailable:", err);
-        });
+    // If text mode or audio room, we don't need video camera stream, but audio room needs mic
+    const needsVideo = activeMode !== 'text' && activeMode !== 'audio_room' && !showAudioRoomSimulator;
+    const needsAudio = activeMode !== 'text';
+
+    if (needsVideo || needsAudio) {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+
+      navigator.mediaDevices.getUserMedia({ 
+        video: needsVideo ? { facingMode } : false, 
+        audio: needsAudio 
+      })
+      .then(stream => {
+        setCameraStream(stream);
+        setPermissionError(false);
+      })
+      .catch(err => {
+        console.warn("Camera/Microphone access was denied or unavailable:", err);
+        setPermissionError(true);
+      });
     } else {
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
         setCameraStream(null);
       }
     }
+
     return () => {
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [selectedMode, showLiveSimulator]);
+  }, [activeMode, facingMode, showLiveSimulator, showAudioRoomSimulator]);
 
+  // Bind video element to media stream
   useEffect(() => {
     if (cameraStream && cameraPreviewRef.current) {
       cameraPreviewRef.current.srcObject = cameraStream;
     }
-  }, [cameraStream, selectedMode, showLiveSimulator]);
+  }, [cameraStream, activeMode, showLiveSimulator]);
 
-  const handleAddLiveHeart = () => {
-    const emojis = ['❤️', '💖', '🔥', '✨', '😍', '👏', '💥', '💯'];
-    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-    const newHeart = {
-      id: Date.now() + Math.random(),
-      left: Math.random() * 80 + 10, // random percent left
-      emoji: randomEmoji,
-    };
-    setLiveHearts(prev => [...prev, newHeart]);
-    
-    // Automatically prune old hearts after animation ends
-    setTimeout(() => {
-      setLiveHearts(prev => prev.filter(h => h.id !== newHeart.id));
-    }, 2500);
-  };
-
-  React.useEffect(() => {
+  // Real-time live comments generation
+  useEffect(() => {
     if (!showLiveSimulator) return;
 
     const mockComments = [
@@ -128,7 +146,6 @@ export default function CreateModal({ onClose }: CreateModalProps) {
       'يوسف العتيبي: ما شاء الله، ربي يسعدك ويوفقك 🌟',
       'عبدالله المطيري: هل هذا البث برعاية منصة نبض؟ 🤔',
       'ريم عبدالله: الإضاءة مذهلة جداً والفكرة جميلة جداً ✨',
-      'محمد عسيري: تحية لك من جنوب المملكة يا غالي 🤍',
       'منار العتيبي: مبدع دائماً، استمر بمشاركة الأفكار 👍',
       'خالد الحربي: كيف يمكنني الانضمام للتحدث معك؟ 🎙️',
       'نورة السديري: رائع جداً! استمع بتركيز وشغف.'
@@ -136,24 +153,13 @@ export default function CreateModal({ onClose }: CreateModalProps) {
 
     const interval = setInterval(() => {
       const randomComment = mockComments[Math.floor(Math.random() * mockComments.length)];
-      setLiveComments(prev => [...prev, randomComment].slice(-5)); // keep last 5
-    }, 3000);
+      setLiveComments(prev => [...prev, randomComment].slice(-5));
+    }, 2800);
 
     return () => clearInterval(interval);
   }, [showLiveSimulator]);
 
-  // Audio Room State
-  const [audioRoomName, setAudioRoomName] = useState('مجلس نبض الثقافي والتقني 🎤');
-  const [audioSpeakersCount, setAudioSpeakersCount] = useState('5');
-  
-  // Simulated uploading
-  const [isUploading, setIsUploading] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
-
-  // Gemini AI Caption generator state
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-
+  // Gemini AI text description generation
   const handleGenerateAiCaption = async () => {
     if (!aiPrompt.trim()) {
       alert('الرجاء إدخال فكرة موجزة أولاً لتوليد النص الذكي.');
@@ -180,45 +186,65 @@ export default function CreateModal({ onClose }: CreateModalProps) {
         alert(data.error || 'فشل توليد الوصف الذكي.');
       }
     } catch (err) {
-      alert('حدث خطأ في الاتصال بخادم جيميناي الذكي.');
+      alert('حدث خطأ في الاتصال بخدمة جيميناي الذكية.');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleAddHashtag = () => {
-    const trimmed = hashtagInput.trim().replace('#', '');
-    if (trimmed && !hashtags.includes(trimmed)) {
-      setHashtags([...hashtags, trimmed]);
-      setHashtagInput('');
+  // Flip Camera Logic
+  const handleFlipCamera = () => {
+    setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+    // Rotate viewfinder animation
+    const preview = cameraPreviewRef.current;
+    if (preview) {
+      preview.classList.add('animate-spin');
+      setTimeout(() => preview.classList.remove('animate-spin'), 600);
     }
   };
 
-  const handleRemoveHashtag = (tagToRemove: string) => {
-    setHashtags(hashtags.filter(t => t !== tagToRemove));
+  // Sound selection
+  const handleSelectSound = (soundName: string) => {
+    setSelectedSound(soundName);
+    setShowSoundLibrary(false);
   };
 
-  const handleMockUpload = () => {
-    setIsUploading(true);
-    setTimeout(() => {
-      setIsUploading(false);
-      if (selectedMode === 'video') {
-        setMediaUrl('https://assets.mixkit.co/videos/preview/mixkit-waves-breaking-in-the-ocean-from-above-42636-large.mp4');
-      } else {
-        setMediaUrl('/src/assets/images/post_scenic_1790855694074.jpg');
-      }
-      alert('تم تحميل وسائط التجربة وتوليد الرابط بنجاح! 🟢');
-    }, 1200);
-  };
-
+  // Dynamic Record Hold / Click Action
   const startRecording = () => {
+    if (isCountingDown) return;
+
+    // Check if countdown timer is set
+    if (selectedTimer && !isRecording) {
+      setIsCountdown(true);
+      setCountdown(selectedTimer);
+      let count = selectedTimer;
+      const timer = setInterval(() => {
+        count--;
+        if (count <= 0) {
+          clearInterval(timer);
+          setCountdown(null);
+          setIsCountdown(false);
+          actuallyStartRecording();
+        } else {
+          setCountdown(count);
+        }
+      }, 1000);
+    } else {
+      actuallyStartRecording();
+    }
+  };
+
+  const actuallyStartRecording = () => {
     setIsRecording(true);
     setRecordingDuration(0);
+    const limitSec = activeMode === '15s' ? 15 : activeMode === '60s' ? 60 : 600;
+
     const interval = setInterval(() => {
       setRecordingDuration(prev => {
-        if (prev >= 8) {
+        if (prev >= limitSec) {
           clearInterval(interval);
-          return 8;
+          stopRecording();
+          return limitSec;
         }
         return prev + 0.1;
       });
@@ -234,610 +260,618 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     setIsRecording(false);
   };
 
-  useEffect(() => {
-    if (!isRecording && recordingDuration > 0) {
-      if (recordingDuration < 1.0) {
-        alert("⚠️ اضغط مطولاً للتسجيل (لمدة ثانية واحدة على الأقل).");
-        setRecordingDuration(0);
-      } else {
-        setMediaUrl('https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4');
-        alert(`🎉 تم تسجيل الفيديو بنجاح! المدة: ${recordingDuration.toFixed(1)} ثوانٍ.`);
-      }
-    }
-  }, [isRecording]);
+  // Post creation handler
+  const handlePublishRecordedVideo = async () => {
+    if (!currentUser) return;
+    setIsUploading(true);
 
-  const handleSubmitPost = (e: React.FormEvent) => {
+    try {
+      // Create short video post in Firestore
+      const finalMedia = mediaUrl || 'https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4';
+      await createNewPost('video', textContent || 'مقطع فيديو قصير ورائع من كاميرا نبض الترند المباشرة 🎥✨', finalMedia, privacy, hashtags);
+      
+      setSuccessMsg('🎉 تم نشر مقطع الفيديو القصير بنجاح ومزامنته سحابياً!');
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } catch (e) {
+      alert("حدث خطأ أثناء الاتصال بقاعدة البيانات.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Direct Gallery Upload
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const isVideo = activeMode === '15s' || activeMode === '60s' || activeMode === '10m';
+      const url = await uploadFileToStorage(file, isVideo ? 'videos' : 'images');
+      setMediaUrl(url);
+      alert('تم رفع ملف الاستوديو بنجاح وحفظه في Firebase Storage! 🟢');
+    } catch (err) {
+      console.error(err);
+      alert('فشل الرفع السحابي. يرجى مراجعة إعدادات الخصوصية.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Handle Publish Text/Image Story or Post
+  const handlePublishContent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMode) return;
+    if (!currentUser) return;
+    setIsUploading(true);
 
-    if (selectedMode === 'post') {
-      if (!content.trim()) return alert('الرجاء كتابة محتوى المنشور أولاً.');
-      createNewPost('text-image', content, mediaUrl, privacy, hashtags);
-    } else if (selectedMode === 'video') {
-      if (!content.trim()) return alert('الرجاء كتابة وصف الفيديو القصير.');
-      createNewPost('video', content, mediaUrl, privacy, hashtags);
-    } else if (selectedMode === 'story') {
-      createStory(mediaUrl);
-    } else if (selectedMode === 'live') {
-      if (currentUser) {
-        const sessionId = `live_${Date.now()}`;
-        setDoc(doc(db, 'live_sessions', sessionId), {
-          id: sessionId,
-          type: 'video',
-          title: liveTitle,
-          category: liveCategory,
-          hostUid: currentUser.uid,
-          hostName: currentUser.displayName,
-          hostAvatar: currentUser.avatar,
-          timestamp: new Date().toISOString()
-        }).catch(err => console.error("Error storing live session:", err));
+    try {
+      if (activeMode === 'text') {
+        if (!textContent.trim()) return alert('الرجاء كتابة النص أولاً.');
+        await createNewPost('text-image', textContent, mediaUrl, privacy, hashtags);
+      } else if (activeMode === 'image') {
+        await createStory(mediaUrl || '/src/assets/images/post_scenic_1790855694074.jpg');
       }
-      setShowLiveSimulator(true);
-      return; // Do not close, show the interactive live stream simulator overlay!
-    } else if (selectedMode === 'audio_room') {
-      if (currentUser) {
-        const sessionId = `audio_${Date.now()}`;
-        setDoc(doc(db, 'live_sessions', sessionId), {
-          id: sessionId,
-          type: 'audio',
-          title: audioRoomName,
-          speakersCount: audioSpeakersCount,
-          hostUid: currentUser.uid,
-          hostName: currentUser.displayName,
-          hostAvatar: currentUser.avatar,
-          timestamp: new Date().toISOString()
-        }).catch(err => console.error("Error storing audio room session:", err));
-      }
-      setShowAudioRoomSimulator(true);
-      return; // Do not close, show the interactive Twitter Space style Audio Room overlay!
+      setSuccessMsg('🎉 تم النشر والمزامنة بنجاح!');
+      setTimeout(() => {
+        onClose();
+      }, 1000);
+    } catch (err) {
+      alert('حدث خطأ في المزامنة السحابية.');
+    } finally {
+      setIsUploading(false);
     }
+  };
 
-    setSuccessMsg('تم النشر وتحديث التغذية بنجاح! 🎉');
+  // Initiate LIVE Stream in Database
+  const handleStartLiveStream = async () => {
+    if (!currentUser) return;
+    const sessionId = `live_${Date.now()}`;
+    try {
+      await setDoc(doc(db, 'live_sessions', sessionId), {
+        id: sessionId,
+        type: 'video',
+        title: liveTitle,
+        category: liveCategory,
+        hostUid: currentUser.uid,
+        hostName: currentUser.displayName,
+        hostAvatar: currentUser.avatar,
+        timestamp: new Date().toISOString(),
+        streamKey: `stream_${Math.random().toString(36).substring(7)}`,
+        listeners: []
+      });
+      setShowLiveSimulator(true);
+    } catch (err) {
+      console.error("Error creating LIVE:", err);
+    }
+  };
+
+  // Initiate Audio Lounge Space in Database
+  const handleStartAudioRoom = async () => {
+    if (!currentUser) return;
+    const sessionId = `audio_${Date.now()}`;
+    try {
+      await setDoc(doc(db, 'live_sessions', sessionId), {
+        id: sessionId,
+        type: 'audio',
+        title: audioRoomName,
+        speakersCount: audioSpeakersCount,
+        hostUid: currentUser.uid,
+        hostName: currentUser.displayName,
+        hostAvatar: currentUser.avatar,
+        timestamp: new Date().toISOString(),
+        streamKey: `audio_${Math.random().toString(36).substring(7)}`,
+        listeners: []
+      });
+      setShowAudioRoomSimulator(true);
+    } catch (err) {
+      console.error("Error creating Audio Space:", err);
+    }
+  };
+
+  const handleAddLiveHeart = () => {
+    const emojis = ['❤️', '🔥', '✨', '😍', '👏', '💥', '💯'];
+    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+    const newHeart = {
+      id: Date.now() + Math.random(),
+      left: Math.random() * 80 + 10,
+      emoji: randomEmoji,
+    };
+    setLiveHearts(prev => [...prev, newHeart]);
     setTimeout(() => {
-      onClose();
-    }, 1000);
+      setLiveHearts(prev => prev.filter(h => h.id !== newHeart.id));
+    }, 2000);
+  };
+
+  const handleAddHashtag = () => {
+    const trimmed = hashtagInput.trim().replace('#', '');
+    if (trimmed && !hashtags.includes(trimmed)) {
+      setHashtags([...hashtags, trimmed]);
+      setHashtagInput('');
+    }
+  };
+
+  const handleRemoveHashtag = (tagToRemove: string) => {
+    setHashtags(hashtags.filter(t => t !== tagToRemove));
+  };
+
+  // Get active CSS filter
+  const getCameraFilterStyle = () => {
+    const filterObj = CAMERA_EFFECTS.find(f => f.id === activeFilter);
+    let styleStr = filterObj ? filterObj.filter : '';
+    if (isBeautyEnabled) {
+      styleStr += ' brightness(1.05) contrast(0.95) saturate(1.03)';
+    }
+    return styleStr;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md p-4">
-      <div className="absolute inset-0" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black md:max-w-lg md:mx-auto md:rounded-3xl overflow-hidden shadow-2xl font-cairo">
       
-      {/* Main Container Card */}
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl z-10 flex flex-col max-h-[85vh] overflow-hidden animate-slideUp">
-        
-        {/* Header Contract */}
-        <div className="p-4 bg-slate-950 border-b border-slate-850 flex items-center justify-between">
-          <button 
-            onClick={onClose} 
-            className="p-1.5 hover:bg-slate-850 rounded-lg text-slate-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      {/* ===================== VIEW A: TEXT MODE EDITOR ===================== */}
+      {activeMode === 'text' && (
+        <div className="absolute inset-0 bg-gradient-to-tr from-[#120c1f] via-[#0b0f19] to-brand-primary/20 flex flex-col justify-between p-6 z-10 text-right">
           
-          <h2 className="text-sm font-extrabold text-white">
-            {selectedMode === null ? 'بوابة الإبداع والنشر' : 'تعبئة التفاصيل والمشاركة'}
-          </h2>
-          
-          {selectedMode !== null ? (
-            <button 
-              onClick={() => { setSelectedMode(null); setSuccessMsg(''); }}
-              className="text-xs text-brand-primary font-bold hover:underline flex items-center gap-1"
-            >
-              <span>تغيير الوضع</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <button onClick={onClose} className="p-2.5 bg-slate-900/40 hover:bg-slate-900/70 border border-slate-800 rounded-full text-slate-300">
+              <X className="w-5 h-5" />
             </button>
-          ) : (
-            <div className="w-8 h-8" />
-          )}
-        </div>
-
-        {/* 1. SELECTION DASHBOARD (Shown when selectedMode is null) */}
-        {selectedMode === null && (
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
-            <div className="text-center space-y-1.5 pb-2">
-              <span className="text-xs bg-brand-primary/10 text-brand-primary px-3 py-1.5 rounded-full font-bold">💡 انقر على أحد الخيارات المنفصلة للبدء</span>
-              <h3 className="text-base font-extrabold text-slate-200 pt-1">ما هو المحتوى الذي تريد مشاركته اليوم؟</h3>
-            </div>
-
-            {/* Grid of highly isolated, premium options */}
-            <div className="grid grid-cols-1 gap-3.5">
-              
-              {/* Option 1: Post */}
-              <button
-                onClick={() => setSelectedMode('post')}
-                className="w-full p-4 bg-slate-950 hover:bg-slate-850 border border-slate-850 hover:border-violet-500 rounded-2xl flex items-center justify-between text-right transition-all transform active:scale-[0.99] group shadow-sm hover:shadow-violet-500/15"
-              >
-                <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-slate-400 group-hover:text-violet-400 transition-colors">
-                  <ArrowRight className="w-4 h-4 rotate-180" />
-                </div>
-
-                <div className="flex-1 ml-4 mr-4">
-                  <h4 className="text-xs font-extrabold text-white group-hover:text-violet-400 transition-colors">إنشاء منشور نصي وصوري 📝</h4>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">شارك أفكارك وتأملاتك مع صورة دافئة في الجدول الزمني العام للمنصة.</p>
-                </div>
-
-                <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 shadow-inner shrink-0">
-                  <FileText className="w-6 h-6" />
-                </div>
-              </button>
-
-              {/* Option 2: Short Video */}
-              <button
-                onClick={() => setSelectedMode('video')}
-                className="w-full p-4 bg-slate-950 hover:bg-slate-850 border border-slate-850 hover:border-brand-primary rounded-2xl flex items-center justify-between text-right transition-all transform active:scale-[0.99] group shadow-sm hover:shadow-brand-primary/15"
-              >
-                <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-slate-400 group-hover:text-brand-primary transition-colors">
-                  <ArrowRight className="w-4 h-4 rotate-180" />
-                </div>
-
-                <div className="flex-1 ml-4 mr-4">
-                  <h4 className="text-xs font-extrabold text-white group-hover:text-brand-primary transition-colors">تسجيل أو رفع فيديو قصير 🎥</h4>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">ارفع مقاطع الفيديوهات القصيرة (Reels/Shorts) التفاعلية لتصل لترند المشاهدات.</p>
-                </div>
-
-                <div className="w-12 h-12 rounded-xl bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center text-brand-primary shadow-inner shrink-0">
-                  <Video className="w-6 h-6" />
-                </div>
-              </button>
-
-              {/* Option 3: Story */}
-              <button
-                onClick={() => setSelectedMode('story')}
-                className="w-full p-4 bg-slate-950 hover:bg-slate-850 border border-slate-850 hover:border-amber-500 rounded-2xl flex items-center justify-between text-right transition-all transform active:scale-[0.99] group shadow-sm hover:shadow-amber-500/15"
-              >
-                <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-slate-400 group-hover:text-amber-400 transition-colors">
-                  <ArrowRight className="w-4 h-4 rotate-180" />
-                </div>
-
-                <div className="flex-1 ml-4 mr-4">
-                  <h4 className="text-xs font-extrabold text-white group-hover:text-amber-400 transition-colors">أضف لقصتك اليومية 💫</h4>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">شارك يومياتك السريعة التي تختفي تلقائياً وبشكل آمن بعد مرور 24 ساعة.</p>
-                </div>
-
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shadow-inner shrink-0">
-                  <BookOpen className="w-6 h-6" />
-                </div>
-              </button>
-
-              {/* Option 4: Live Stream */}
-              <button
-                onClick={() => setSelectedMode('live')}
-                className="w-full p-4 bg-slate-950 hover:bg-slate-850 border border-slate-850 hover:border-red-500 rounded-2xl flex items-center justify-between text-right transition-all transform active:scale-[0.99] group shadow-sm hover:shadow-red-500/15"
-              >
-                <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-slate-400 group-hover:text-red-400 transition-colors">
-                  <ArrowRight className="w-4 h-4 rotate-180" />
-                </div>
-
-                <div className="flex-1 ml-4 mr-4">
-                  <h4 className="text-xs font-extrabold text-white group-hover:text-red-400 transition-colors">إطلاق بث مباشر تفاعلي 🔴</h4>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">افتح بث الفيديو الحي المباشر للتفاعل والتواصل اللحظي مع جميع المشاهدين.</p>
-                </div>
-
-                <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 shadow-inner shrink-0 animate-pulse">
-                  <Radio className="w-6 h-6 fill-current" />
-                </div>
-              </button>
-
-              {/* Option 5: Audio Room */}
-              <button
-                onClick={() => setSelectedMode('audio_room')}
-                className="w-full p-4 bg-slate-950 hover:bg-slate-850 border border-slate-850 hover:border-emerald-500 rounded-2xl flex items-center justify-between text-right transition-all transform active:scale-[0.99] group shadow-sm hover:shadow-emerald-500/15"
-              >
-                <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-slate-400 group-hover:text-emerald-400 transition-colors">
-                  <ArrowRight className="w-4 h-4 rotate-180" />
-                </div>
-
-                <div className="flex-1 ml-4 mr-4">
-                  <h4 className="text-xs font-extrabold text-white group-hover:text-emerald-400 transition-colors">فتح مجلس وغرفة صوتية 🎤</h4>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">أنشئ صالون صوتي تفاعلي وادعُ أصدقائك للحوار والمناقشات الممتعة.</p>
-                </div>
-
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-inner shrink-0">
-                  <Mic className="w-6 h-6" />
-                </div>
-              </button>
-
-            </div>
+            <span className="text-sm font-extrabold text-white">منشور نصي سحابي</span>
+            <div className="w-10 h-10" />
           </div>
-        )}
 
-        {/* 2. SPECIFIC FORMS (Shown when an isolated mode is selected) */}
-        {selectedMode !== null && (
-          <div className="flex-1 overflow-y-auto p-6 no-scrollbar">
+          {/* Text Form */}
+          <form onSubmit={handlePublishContent} className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full space-y-6">
+            
             {successMsg && (
-              <div className="mb-4 p-4 bg-emerald-950/40 border border-emerald-850 rounded-xl text-xs text-emerald-400 text-center font-bold">
-                🎉 {successMsg}
+              <div className="p-3 bg-emerald-950/40 border border-emerald-800 text-emerald-400 text-xs rounded-xl text-center font-bold">
+                {successMsg}
               </div>
             )}
 
-            <form onSubmit={handleSubmitPost} className="space-y-5 text-right">
-              
-              {/* Form A: Posts / Videos / Story Forms */}
-              {(selectedMode === 'post' || selectedMode === 'video' || selectedMode === 'story') && (
-                <>
-                  {/* Gemini Assistant Panel (Only for feed items) */}
-                  {selectedMode !== 'story' && (
-                    <div className="p-4 bg-slate-950 border border-brand-primary/20 rounded-2xl space-y-3 mb-1">
-                      <div className="flex items-center gap-1.5 justify-end">
-                        <span className="text-xs font-bold text-white">مساعد الكتابة الذكي بـ Gemini 🔮</span>
-                        <Sparkles className="w-4 h-4 text-brand-primary fill-current animate-pulse" />
-                      </div>
-                      <p className="text-[10px] text-slate-400 leading-relaxed">أدخل فكرة مبسطة وسيقوم الذكاء الاصطناعي بصياغة أفضل وصف متكامل مع الهاشتاغات الرائجة لك تلقائياً.</p>
-                      
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={isGenerating}
-                          onClick={handleGenerateAiCaption}
-                          className="h-9 px-3.5 bg-brand-primary text-white hover:opacity-95 text-xs font-bold rounded-xl shrink-0 flex items-center justify-center active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          {isGenerating ? 'جاري الصياغة...' : 'صياغة ✨'}
-                        </button>
-                        <input
-                          type="text"
-                          placeholder="مثال: ليلة ممطرة هادئة مع فنجان قهوة دافئ..."
-                          value={aiPrompt}
-                          onChange={(e) => setAiPrompt(e.target.value)}
-                          className="flex-1 h-9 px-3 bg-slate-900 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right font-medium"
-                        />
-                      </div>
-                    </div>
-                  )}
+            {/* AI Writing Assistant */}
+            <div className="p-4 bg-slate-950/50 border border-brand-primary/10 rounded-2xl space-y-2">
+              <div className="flex items-center gap-1.5 justify-end">
+                <span className="text-xs font-bold text-white">مساعد الكتابة الذكي بـ Gemini 🔮</span>
+                <Sparkles className="w-4 h-4 text-brand-primary animate-pulse" />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleGenerateAiCaption}
+                  disabled={isGenerating}
+                  className="px-3 bg-brand-primary text-white text-xs font-bold rounded-xl hover:opacity-95 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isGenerating ? 'جاري صياغته...' : 'توليد ✨'}
+                </button>
+                <input
+                  type="text"
+                  placeholder="مثال: وصف فنجان قهوة الصباح والهدوء..."
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  className="flex-1 h-9 px-3 bg-slate-900 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right"
+                />
+              </div>
+            </div>
 
-                  {/* Caption input */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-400 font-medium">اكتب وصفاً أو تعليقاً جذاباً</label>
-                    <textarea
-                      placeholder={selectedMode === 'story' ? 'أضف نصاً لقصتك الحالية... (اختياري)' : 'ماذا يدور في ذهنك اليوم؟ أضف الهاشتاغات لتصل لمنشورات الترند...'}
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      rows={3}
-                      maxLength={280}
-                      className="w-full p-4 bg-slate-950 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-2xl text-xs text-slate-200 text-right leading-relaxed resize-none"
-                    />
-                    <div className="text-[10px] text-slate-500 font-mono">
-                      {content.length}/280 حرف
-                    </div>
-                  </div>
+            <textarea
+              placeholder="اكتب منشورك الإبداعي للجميع هنا..."
+              value={textContent}
+              onChange={(e) => setContent(e.target.value)}
+              rows={4}
+              maxLength={280}
+              className="w-full p-4 bg-transparent border-none focus:outline-none text-base text-slate-100 text-center leading-relaxed font-bold placeholder-slate-500 resize-none"
+            />
 
-                  {/* Upload media */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-400 font-medium">ملفات الوسائط والصور</label>
-                    <div className="p-6 bg-slate-950/60 border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-3">
-                      {mediaUrl ? (
-                        <div className="w-full space-y-2">
-                          {selectedMode === 'video' ? (
-                            <div className="p-3 bg-slate-900 rounded-xl border border-slate-850 flex items-center justify-between text-left">
-                              <span className="text-[10px] text-emerald-400 font-bold">تم الإعداد</span>
-                              <span className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">video_reel_captured.mp4</span>
-                            </div>
-                          ) : (
-                            <img 
-                              src={mediaUrl} 
-                              alt="Uploaded asset" 
-                              className="max-h-32 object-cover rounded-xl mx-auto border border-slate-800"
-                            />
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setMediaUrl('')}
-                            className="text-[11px] text-red-400 hover:underline font-bold"
-                          >
-                            إزالة الملف الحالي
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          {selectedMode === 'video' ? (
-                            /* TikTok Style Hold-to-Record Simulated Camera Viewport */
-                            <div className="w-full space-y-4">
-                              <div className="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-slate-850 flex flex-col items-center justify-center">
-                                {/* Grid camera overlay */}
-                                <div className="absolute inset-0 border border-white/5 grid grid-cols-3 grid-rows-3 pointer-events-none">
-                                  {[...Array(9)].map((_, i) => (
-                                    <div key={i} className="border border-white/5" />
-                                  ))}
-                                </div>
-
-                                {/* Real live camera preview stream element */}
-                                <video
-                                  ref={cameraPreviewRef}
-                                  autoPlay
-                                  playsInline
-                                  muted
-                                  className="absolute inset-0 w-full h-full object-cover z-0"
-                                />
-
-                                {/* Simulated Camera view background scrim */}
-                                <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 to-black/30 z-10 pointer-events-none" />
-
-                                {/* Ticking REC Dot */}
-                                <div className="absolute top-3 right-4 z-10 flex items-center gap-1.5 bg-black/50 px-2 py-1 rounded-full text-white text-[10px] font-bold">
-                                  <span className={`w-2.5 h-2.5 bg-red-600 rounded-full ${isRecording ? 'animate-ping' : ''}`} />
-                                  <span>{isRecording ? 'جاري التسجيل...' : 'جاهز'}</span>
-                                </div>
-
-                                {/* Recording Duration display */}
-                                {isRecording && (
-                                  <div className="absolute top-12 left-1/2 transform -translate-x-1/2 z-10 bg-brand-primary text-white font-mono text-xs font-bold px-3 py-1 rounded-xl shadow-lg">
-                                    {recordingDuration.toFixed(1)}s / 8.0s
-                                  </div>
-                                )}
-
-                                {/* Camera Viewport graphic */}
-                                <div className="relative z-10 text-center space-y-1 select-none">
-                                  <Video className={`w-10 h-10 mx-auto ${isRecording ? 'text-red-500 scale-110 animate-pulse' : 'text-slate-500'}`} />
-                                  <p className="text-[10px] text-slate-400">كاميرا نبض المباشرة</p>
-                                </div>
-
-                                {/* Circular Hold progress indicator overlay */}
-                                {isRecording && (
-                                  <div className="absolute bottom-4 left-4 right-4 z-10">
-                                    <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-white/5">
-                                      <div 
-                                        className="bg-brand-primary h-full rounded-full transition-all duration-100" 
-                                        style={{ width: `${(recordingDuration / 8) * 100}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Interactive Hold To Record Trigger */}
-                              <div className="flex flex-col items-center space-y-2 select-none">
-                                <button
-                                  type="button"
-                                  onMouseDown={startRecording}
-                                  onMouseUp={stopRecording}
-                                  onMouseLeave={stopRecording}
-                                  onTouchStart={startRecording}
-                                  onTouchEnd={stopRecording}
-                                  className={`w-16 h-16 rounded-full border-4 border-slate-900 shadow-xl flex items-center justify-center transition-all ${
-                                    isRecording 
-                                      ? 'bg-red-600 scale-95 ring-4 ring-brand-primary/30' 
-                                      : 'bg-brand-primary hover:bg-brand-primary/90 scale-100 active:scale-95'
-                                  }`}
-                                  title="اضغط باستمرار للتسجيل"
-                                >
-                                  <span className="w-5 h-5 bg-white rounded-full" />
-                                </button>
-                                <span className="text-[11px] font-bold text-slate-300">اضغط باستمرار للتسجيل 🔴</span>
-                                <span className="text-[10px] text-slate-500">(أو ارفع ملفاً من الجوال في الأسفل)</span>
-                              </div>
-
-                              <div className="relative flex py-2 items-center justify-center">
-                                <div className="flex-grow border-t border-slate-850"></div>
-                                <span className="flex-shrink mx-4 text-[10px] text-slate-500 font-bold">أو</span>
-                                <div className="flex-grow border-t border-slate-850"></div>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <UploadCloud className="w-8 h-8 text-slate-500 animate-pulse" />
-                              <div className="space-y-1">
-                                <p className="text-xs text-slate-300 font-semibold">اسحب وأفلت الملفات هنا</p>
-                                <p className="text-[10px] text-slate-500">يدعم صيغ PNG, JPG للصور</p>
-                              </div>
-                            </>
-                          )}
-
-                          {/* Standard File Picker from mobile/gallery */}
-                          <div className="flex gap-2.5">
-                            <label
-                              htmlFor="real-file-picker"
-                              className="px-4 py-2.5 bg-brand-primary text-white rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md shadow-brand-primary/10"
-                            >
-                              {isUploading ? 'جاري رفع الملف...' : 'اختر ملفاً من الجوال / الاستوديو 📁'}
-                            </label>
-                            <input
-                              type="file"
-                              id="real-file-picker"
-                              onChange={handleRealFileUpload}
-                              disabled={isUploading}
-                              accept={selectedMode === 'video' ? 'video/*' : 'image/*'}
-                              className="hidden"
-                            />
-                            
-                            <button
-                              type="button"
-                              onClick={handleMockUpload}
-                              disabled={isUploading}
-                              className="px-4 py-2.5 bg-slate-850 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold transition-all active:scale-95 border border-slate-800"
-                            >
-                              ملف تجريبي سريع ⚡️
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Hashtags (Only for post / video) */}
-                  {selectedMode !== 'story' && (
-                    <div className="space-y-2">
-                      <label className="text-xs text-slate-400 font-medium">وسوم الهاشتاغ المرفقة</label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={handleAddHashtag}
-                          className="h-9 px-4 bg-slate-850 hover:bg-slate-800 rounded-xl text-xs font-bold text-brand-secondary border border-slate-800"
-                        >
-                          إضافة +
-                        </button>
-                        <input
-                          type="text"
-                          placeholder="طبيعة، تكنولوجيا..."
-                          value={hashtagInput}
-                          onChange={(e) => setHashtagInput(e.target.value)}
-                          onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleAddHashtag(); } }}
-                          className="flex-1 h-9 px-3 bg-slate-950 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right"
-                        />
-                      </div>
-                      
-                      <div className="flex flex-wrap flex-row-reverse gap-1.5 pt-1">
-                        {hashtags.map((tag, i) => (
-                          <span 
-                            key={i} 
-                            className="inline-flex items-center gap-1 px-2 py-1 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-300 font-medium"
-                          >
-                            <button type="button" onClick={() => handleRemoveHashtag(tag)} className="text-red-400 hover:text-white font-bold font-mono">×</button>
-                            <span>#{tag}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Privacy settings */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-400 font-medium">خصوصية ومستوى رؤية المنشور</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPrivacy('private')}
-                        className={`py-2 px-3 border rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-colors ${
-                          privacy === 'private' ? 'bg-slate-850 border-brand-primary text-brand-primary' : 'bg-slate-950/40 border-slate-800 text-slate-400'
-                        }`}
-                      >
-                        <Lock className="w-4 h-4" />
-                        <span>خاص بي</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPrivacy('followers')}
-                        className={`py-2 px-3 border rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-colors ${
-                          privacy === 'followers' ? 'bg-slate-850 border-brand-primary text-brand-primary' : 'bg-slate-950/40 border-slate-800 text-slate-400'
-                        }`}
-                      >
-                        <Users className="w-4 h-4" />
-                        <span>للمتابعين فقط</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPrivacy('public')}
-                        className={`py-2 px-3 border rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-colors ${
-                          privacy === 'public' ? 'bg-slate-850 border-brand-primary text-brand-primary' : 'bg-slate-950/40 border-slate-800 text-slate-400'
-                        }`}
-                      >
-                        <Globe className="w-4 h-4" />
-                        <span>عام للكل</span>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Form B: Live stream specifics */}
-              {selectedMode === 'live' && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-red-950/20 border border-red-900/60 rounded-2xl flex items-center justify-between gap-3 text-right">
-                    <div className="text-xs text-red-400 leading-relaxed">
-                      ستبدأ بثاً مباشراً فورياً. سيتم إخطار كافة متابعيك المسجلين والنشطين الآن فور بدئك البث المباشر.
-                    </div>
-                    <Radio className="w-8 h-8 text-red-500 fill-current shrink-0 animate-ping" />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-400 font-medium">عنوان البث المباشر</label>
-                    <input
-                      type="text"
-                      value={liveTitle}
-                      onChange={(e) => setLiveTitle(e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-950 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right font-medium"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-400 font-medium">فئة ومجال البث</label>
-                    <select
-                      value={liveCategory}
-                      onChange={(e) => setLiveCategory(e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-950 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right font-medium"
-                    >
-                      <option value="ألعاب ومناقشات">ألعاب ومناقشات تقنية</option>
-                      <option value="ثقافة وفن">ثقافة وفنون تصويرية</option>
-                      <option value="تعليم ودردشة">سفر ودردشة مفتوحة مع المتابعين</option>
-                    </select>
-                  </div>
-
-                  <div className="relative aspect-video bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
-                    <img 
-                      src="/src/assets/images/welcome_abstract_1790855671657.jpg" 
-                      alt="Camera feed" 
-                      className="absolute inset-0 w-full h-full object-cover opacity-60 filter blur-sm"
-                    />
-                    <div className="relative z-10 flex flex-col items-center space-y-2 text-slate-300">
-                      <span className="text-xs bg-red-600 text-white px-3 py-1 rounded-full font-bold animate-pulse">محاكاة البث المباشر المسبق</span>
-                      <p className="text-[10px] text-slate-400">سيتم تفعيل كاميرا الهاتف الأمامية فور الضغط على الزر أدناه</p>
-                    </div>
-                  </div>
+            <div className="flex flex-col space-y-4">
+              {/* Hashtags adding */}
+              <div className="space-y-1">
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleAddHashtag} className="h-9 px-3 bg-slate-850 hover:bg-slate-800 rounded-xl text-xs font-bold text-brand-secondary">أضف +</button>
+                  <input
+                    type="text"
+                    placeholder="طبيعة، برمجة..."
+                    value={hashtagInput}
+                    onChange={(e) => setHashtagInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddHashtag(); } }}
+                    className="flex-1 h-9 px-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 text-right"
+                  />
                 </div>
-              )}
+                <div className="flex flex-wrap flex-row-reverse gap-1.5 pt-1">
+                  {hashtags.map((tag, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-300">
+                      <button type="button" onClick={() => handleRemoveHashtag(tag)} className="text-red-400 font-bold">×</button>
+                      <span>#{tag}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
 
-              {/* Form C: Audio Room specifics */}
-              {selectedMode === 'audio_room' && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-brand-primary/10 border border-brand-primary/40 rounded-2xl flex items-center justify-between gap-3 text-right">
-                    <div className="text-xs text-brand-primary leading-relaxed">
-                      غرف الصوت التفاعلية تتيح لك جمع ما يصل إلى 100 مستمع وإتاحة ميكروفونات متعددة للنقاش البناء.
-                    </div>
-                    <Mic className="w-8 h-8 text-brand-primary shrink-0 animate-bounce" />
-                  </div>
+              {/* Privacy Toggle */}
+              <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-xl border border-slate-850">
+                <select
+                  value={privacy}
+                  onChange={(e: any) => setPrivacy(e.target.value)}
+                  className="bg-transparent text-xs text-brand-secondary font-bold focus:outline-none"
+                >
+                  <option value="public" className="bg-slate-900 text-slate-200">الجميع (عام) 🌎</option>
+                  <option value="followers" className="bg-slate-900 text-slate-200">المتابعين فقط 👥</option>
+                  <option value="private" className="bg-slate-900 text-slate-200">خاص بي 🔒</option>
+                </select>
+                <span className="text-xs text-slate-400 font-semibold">مستوى الرؤية</span>
+              </div>
+            </div>
 
+            <button
+              type="submit"
+              disabled={isUploading}
+              className="w-full h-12 rounded-xl bg-gradient-to-l from-brand-primary to-brand-gradient-start hover:opacity-95 text-white text-xs font-bold active:scale-[0.98] transition-all flex items-center justify-center shadow-lg shadow-brand-primary/20"
+            >
+              {isUploading ? 'جاري نشر المنشور...' : 'انشر الآن على التغذية 🚀'}
+            </button>
+          </form>
+
+          {/* Mode Switcher */}
+          <ModeSelector activeMode={activeMode} onChange={setActiveMode} />
+
+        </div>
+      )}
+
+      {/* ===================== VIEW B: EXACT TIKTOK CAMERA VIEWFINDER ===================== */}
+      {activeMode !== 'text' && (
+        <div className="absolute inset-0 bg-black flex flex-col justify-between z-0">
+          
+          {/* Real Live HTML5 Camera Video Element */}
+          <div className="absolute inset-0 z-0">
+            {permissionError ? (
+              <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-8 text-center space-y-4">
+                <AlertCircle className="w-12 h-12 text-red-500 animate-bounce" />
+                <h3 className="text-base font-extrabold text-white">أذونات الكاميرا والمايكروفون مطلوبة 🚫</h3>
+                <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+                  لم تتمكن منصة نبض من الوصول لعدسة كاميرا جوالك أو المايكروفون. يرجى تفعيل الأذونات من إعدادات المتصفح للتمتع بالتجربة الحية.
+                </p>
+                <label
+                  htmlFor="camera-picker-file"
+                  className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  تصفح ورفع ملف مباشرة بدلاً من ذلك 📁
+                </label>
+              </div>
+            ) : (
+              <video
+                ref={cameraPreviewRef}
+                autoPlay
+                playsInline
+                muted={isMuted}
+                className="w-full h-full object-cover transition-transform duration-700"
+                style={{ 
+                  transform: facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)',
+                  filter: getCameraFilterStyle()
+                }}
+              />
+            )}
+            
+            {/* Viewfinder Vignette Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 pointer-events-none" />
+            
+            {/* Countdown Big Overlay */}
+            {countdown !== null && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-30">
+                <span className="text-7xl font-extrabold text-brand-primary animate-ping">{countdown}</span>
+              </div>
+            )}
+          </div>
+
+          {/* ======================= TOP ROW OVERLAYS ======================= */}
+          <div className="relative z-10 p-4 flex items-center justify-between">
+            <button 
+              onClick={onClose} 
+              className="p-2.5 bg-black/40 backdrop-blur-md hover:bg-black/60 rounded-full text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Sound Selector library button (TikTok precise styling) */}
+            <button
+              onClick={() => setShowSoundLibrary(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full hover:bg-black/60 text-white text-xs font-bold transition-all"
+            >
+              <Music className="w-3.5 h-3.5 text-brand-secondary fill-current animate-pulse" />
+              <span className="truncate max-w-[120px]">{selectedSound || 'إضافة صوت 🎵'}</span>
+            </button>
+
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className={`p-2.5 bg-black/40 backdrop-blur-md rounded-full border border-white/5 text-white ${isMuted ? 'text-red-400' : 'text-emerald-400'}`}
+            >
+              <Volume2 className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* ======================= FLOATING SIDEBAR (RIGHT COLUMN) ======================= */}
+          <div className="absolute top-20 right-4 z-20 flex flex-col gap-4">
+            
+            {/* Flip Camera */}
+            <button 
+              onClick={handleFlipCamera}
+              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
+            >
+              <div className="p-3 bg-black/35 backdrop-blur-md rounded-full hover:bg-black/50 border border-white/5 active:scale-95 transition-all">
+                <RotateCw className="w-5 h-5" />
+              </div>
+              <span>قلب</span>
+            </button>
+
+            {/* Speed selection */}
+            <button 
+              onClick={() => setSpeedMultiplier(prev => prev === '1x' ? '2x' : prev === '2x' ? '0.5x' : '1x')}
+              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
+            >
+              <div className="p-3 bg-black/35 backdrop-blur-md rounded-full hover:bg-black/50 border border-white/5 active:scale-95 transition-all">
+                <span className="text-[11px] font-mono font-extrabold text-brand-secondary">{speedMultiplier}</span>
+              </div>
+              <span>السرعة</span>
+            </button>
+
+            {/* Filters Tray toggle */}
+            <button 
+              onClick={() => setShowFiltersTray(!showFiltersTray)}
+              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
+            >
+              <div className={`p-3 rounded-full backdrop-blur-md border border-white/5 active:scale-95 transition-all ${
+                activeFilter !== 'none' ? 'bg-brand-primary text-white' : 'bg-black/35 text-white hover:bg-black/50'
+              }`}>
+                <Sliders className="w-5 h-5" />
+              </div>
+              <span>الفلاتر</span>
+            </button>
+
+            {/* Face Enhancement Beauty Mode Toggle */}
+            <button 
+              onClick={() => setIsBeautyEnabled(!isBeautyEnabled)}
+              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
+            >
+              <div className={`p-3 rounded-full backdrop-blur-md border border-white/5 active:scale-95 transition-all ${
+                isBeautyEnabled ? 'bg-emerald-500 text-white' : 'bg-black/35 text-white hover:bg-black/50'
+              }`}>
+                <Sparkle className="w-5 h-5" />
+              </div>
+              <span>تحسين</span>
+            </button>
+
+            {/* Countdown timer toggle */}
+            <button 
+              onClick={() => setSelectedTimer(prev => prev === 3 ? 10 : 3)}
+              className="flex flex-col items-center gap-1 text-white text-[10px] font-bold text-center focus:outline-none"
+            >
+              <div className="p-3 bg-black/35 backdrop-blur-md rounded-full hover:bg-black/50 border border-white/5 active:scale-95 transition-all text-brand-primary font-mono text-[11px] font-extrabold">
+                {selectedTimer}s
+              </div>
+              <span>المؤقت</span>
+            </button>
+
+          </div>
+
+          {/* ======================= BOTTOM PANEL & CAPTURE CONTROLS ======================= */}
+          <div className="relative z-10 flex flex-col space-y-4 pb-6">
+            
+            {/* If we have captured media or files - show a publish card overlay inside viewfinder */}
+            {mediaUrl && (
+              <div className="mx-4 p-4 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-3xl space-y-3 shadow-2xl text-right animate-slideUp">
+                <div className="flex justify-between items-center">
+                  <button onClick={() => setMediaUrl('')} className="text-[10px] text-red-400 font-bold hover:underline">إلغاء وإعادة المحاولة 🗑️</button>
+                  <span className="text-xs font-extrabold text-white">جاهز للنشر والمزامنة السحابية</span>
+                </div>
+                <textarea
+                  placeholder="أدخل عنواناً جذاباً ووصفاً مميزاً للمقطع..."
+                  value={textContent}
+                  onChange={(e) => setContent(e.target.value)}
+                  rows={2}
+                  className="w-full p-2 bg-slate-950 border border-slate-800 focus:outline-none rounded-xl text-xs text-slate-200 text-right leading-relaxed"
+                />
+                <button
+                  onClick={handlePublishRecordedVideo}
+                  disabled={isUploading}
+                  className="w-full h-11 bg-brand-primary text-white text-xs font-bold rounded-xl active:scale-95 transition-all"
+                >
+                  {isUploading ? 'جاري رفع ونشر الفيديو...' : 'انشر الآن على التغذية 🚀'}
+                </button>
+              </div>
+            )}
+
+            {/* LIVE setup form overlay */}
+            {activeMode === 'live' && !showLiveSimulator && (
+              <div className="mx-4 p-5 bg-slate-950/90 border border-slate-850 rounded-3xl space-y-4 text-right shadow-xl">
+                <h3 className="text-xs font-extrabold text-white">إطلاق البث المباشر التفاعلي</h3>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-slate-400 block font-semibold">عنوان البث المباشر</label>
+                  <input
+                    type="text"
+                    value={liveTitle}
+                    onChange={(e) => setLiveTitle(e.target.value)}
+                    className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right"
+                  />
+                </div>
+                <button
+                  onClick={handleStartLiveStream}
+                  className="w-full h-11 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/10"
+                >
+                  ابدأ البث المباشر والربط السحابي 🔴
+                </button>
+              </div>
+            )}
+
+            {/* Audio room setup form overlay */}
+            {activeMode === 'audio_room' && !showAudioRoomSimulator && (
+              <div className="mx-4 p-5 bg-slate-950/90 border border-slate-850 rounded-3xl space-y-4 text-right shadow-xl">
+                <h3 className="text-xs font-extrabold text-white">إطلاق مجلس حواري صوتي</h3>
+                <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-xs text-slate-400 font-medium">اسم الغرفة الصوتية</label>
+                    <label className="text-[10px] text-slate-400 block font-semibold">اسم الغرفة والمجلس</label>
                     <input
                       type="text"
                       value={audioRoomName}
                       onChange={(e) => setAudioRoomName(e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-950 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right font-medium"
+                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right"
                     />
                   </div>
-
                   <div className="space-y-1">
-                    <label className="text-xs text-slate-400 font-medium">الحد الأقصى للمتحدثين على المنصة</label>
+                    <label className="text-[10px] text-slate-400 block font-semibold">الحد الأقصى للمتحدثين</label>
                     <input
                       type="number"
                       value={audioSpeakersCount}
                       onChange={(e) => setAudioSpeakersCount(e.target.value)}
-                      min={2}
-                      max={12}
-                      className="w-full h-11 px-4 bg-slate-950 border border-slate-800 focus:border-brand-primary focus:outline-none rounded-xl text-xs text-slate-200 text-right font-medium"
+                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right"
                     />
                   </div>
-
-                  <div className="p-5 bg-slate-950 border border-slate-850 rounded-2xl flex items-center justify-center gap-1.5 h-16">
-                    <div className="w-1.5 h-8 bg-brand-secondary rounded-full animate-pulse" />
-                    <div className="w-1.5 h-12 bg-brand-primary rounded-full animate-pulse delay-75" />
-                    <div className="w-1.5 h-6 bg-brand-secondary rounded-full animate-pulse delay-150" />
-                    <div className="w-1.5 h-10 bg-brand-primary rounded-full animate-pulse delay-100" />
-                    <div className="w-1.5 h-4 bg-brand-secondary rounded-full animate-pulse" />
-                  </div>
                 </div>
-              )}
+                <button
+                  onClick={handleStartAudioRoom}
+                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg"
+                >
+                  افتح المجلس الصوتي السحابي 🎤
+                </button>
+              </div>
+            )}
 
-              {/* Action Publish button */}
-              <button
-                type="submit"
-                className="w-full h-12 rounded-2xl bg-gradient-to-l from-brand-primary to-brand-gradient-start hover:opacity-95 text-white text-xs font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20"
-              >
-                <span>
-                  {selectedMode === 'post' && 'انشر الآن على التغذية العام'}
-                  {selectedMode === 'video' && 'شارك الفيديو القصير'}
-                  {selectedMode === 'story' && 'أضف للقصص اليومية'}
-                  {selectedMode === 'live' && 'ابدأ البث المباشر فوراً'}
-                  {selectedMode === 'audio_room' && 'افتح المجلس الصوتي'}
-                </span>
-                <Plus className="w-4 h-4" />
-              </button>
+            {/* If we are actively holding/recording - show live progress slider bar */}
+            {isRecording && (
+              <div className="px-6">
+                <div className="w-full bg-slate-900/60 h-2 rounded-full overflow-hidden border border-white/5">
+                  <div 
+                    className="bg-brand-primary h-full rounded-full transition-all duration-100" 
+                    style={{ width: `${(recordingDuration / (activeMode === '15s' ? 15 : activeMode === '60s' ? 60 : 600)) * 100}%` }}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono mt-1">
+                  <span>{activeMode === '15s' ? '15.0s' : activeMode === '60s' ? '60.0s' : '10m'}</span>
+                  <span className="text-white font-bold">{recordingDuration.toFixed(1)}s</span>
+                </div>
+              </div>
+            )}
 
-            </form>
+            {/* ======================= CAPTURE ACTIONS ROW ======================= */}
+            {!mediaUrl && activeMode !== 'live' && activeMode !== 'audio_room' && (
+              <div className="flex items-center justify-around px-8">
+                
+                {/* Effects Menu trigger */}
+                <button 
+                  onClick={() => setShowFiltersTray(true)}
+                  className="flex flex-col items-center gap-1.5 focus:outline-none"
+                >
+                  <div className="w-12 h-12 bg-white/15 hover:bg-white/25 rounded-xl border border-white/10 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all shadow-lg">
+                    <Smile className="w-6 h-6 text-yellow-300" />
+                  </div>
+                  <span className="text-[10px] text-white font-bold">المؤثرات</span>
+                </button>
+
+                {/* Big TikTok Central Capture Button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={isRecording ? stopRecording : startRecording}
+                    className={`w-18 h-18 rounded-full border-4 border-white flex items-center justify-center transition-all ${
+                      isRecording ? 'bg-red-600 scale-90' : 'bg-transparent hover:bg-white/10 scale-100'
+                    }`}
+                  >
+                    <div className={`rounded-full transition-all ${
+                      isRecording ? 'w-6 h-6 bg-white rounded-md' : 'w-13 h-13 bg-brand-primary'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Gallery Upload (natively triggers mobile input file picker) */}
+                <div className="flex flex-col items-center gap-1.5">
+                  <label 
+                    htmlFor="camera-picker-file"
+                    className="w-12 h-12 bg-white/15 hover:bg-white/25 rounded-xl border border-white/10 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all cursor-pointer shadow-lg"
+                  >
+                    <UploadCloud className="w-6 h-6 text-brand-secondary" />
+                  </label>
+                  <input
+                    type="file"
+                    id="camera-picker-file"
+                    accept="image/*,video/*"
+                    onChange={handleGalleryUpload}
+                    className="hidden"
+                  />
+                  <span className="text-[10px] text-white font-bold">تحميل</span>
+                </div>
+
+              </div>
+            )}
+
+            {/* Mode Selector horizontal line */}
+            {!mediaUrl && !showLiveSimulator && !showAudioRoomSimulator && (
+              <ModeSelector activeMode={activeMode} onChange={setActiveMode} />
+            )}
+
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
+      {/* ===================== VIEW C: SOUND LIBRARY TIKTOK SHEET ===================== */}
+      {showSoundLibrary && (
+        <div className="fixed inset-0 z-[200] bg-slate-950 flex flex-col justify-between p-6">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <button onClick={() => setShowSoundLibrary(false)} className="text-slate-400 hover:text-white">إغلاق ×</button>
+            <h3 className="text-sm font-extrabold text-white">مكتبة الأصوات والترندات</h3>
+            <div className="w-9 h-9" />
+          </div>
 
-      {/* 4. FULLSCREEN INTERACTIVE LIVE STREAM SIMULATOR */}
+          <div className="flex-1 overflow-y-auto py-4 space-y-3.5 text-right">
+            {TIKTOK_SOUNDS.map(sound => (
+              <div 
+                key={sound.id}
+                onClick={() => handleSelectSound(sound.name)}
+                className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl hover:border-brand-primary flex items-center justify-between cursor-pointer transition-colors"
+              >
+                <span className="text-xs text-slate-500 font-mono">{sound.duration}</span>
+                <div className="text-right">
+                  <h4 className="text-xs font-bold text-white">{sound.name}</h4>
+                  <p className="text-[10px] text-slate-400">@{sound.artist}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button 
+            onClick={() => handleSelectSound('')}
+            className="w-full h-11 bg-slate-850 hover:bg-slate-800 rounded-xl text-xs text-slate-300 font-semibold"
+          >
+            إزالة الصوت المختار
+          </button>
+        </div>
+      )}
+
+      {/* ===================== VIEW D: FILTERS SELECTION PANEL ===================== */}
+      {showFiltersTray && (
+        <div className="absolute bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md rounded-t-3xl border-t border-slate-850 p-6 space-y-4 animate-slideUp">
+          <div className="flex justify-between items-center">
+            <button onClick={() => setShowFiltersTray(false)} className="text-[11px] text-slate-400 hover:text-white">إخفاء</button>
+            <span className="text-xs font-extrabold text-white">فلاتر الكاميرا والمؤثرات</span>
+          </div>
+          <div className="flex flex-row-reverse gap-3 overflow-x-auto pb-2 no-scrollbar">
+            {CAMERA_EFFECTS.map(effect => (
+              <button
+                key={effect.id}
+                onClick={() => { setActiveFilter(effect.id); setShowFiltersTray(false); }}
+                className={`flex-col items-center justify-center px-4 py-3 rounded-2xl shrink-0 border text-center transition-all ${
+                  activeFilter === effect.id 
+                    ? 'bg-brand-primary border-brand-primary text-white' 
+                    : 'bg-slate-950/40 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-full mx-auto bg-gradient-to-tr from-brand-primary to-brand-secondary opacity-80 mb-1.5" />
+                <span className="text-[10px] font-bold block">{effect.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===================== VIEW E: FULLSCREEN LIVE BROADCAST STUDIO ===================== */}
       {showLiveSimulator && (
         <div className="fixed inset-0 z-[150] flex flex-col bg-slate-950 text-white p-4">
           
@@ -853,7 +887,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50" />
           </div>
 
-          {/* Simulated Floating Hearts rising */}
+          {/* Floating Hearts rising animation placeholder */}
           {liveHearts.map(heart => (
             <div
               key={heart.id}
@@ -869,7 +903,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             <button
               onClick={() => {
                 setShowLiveSimulator(false);
-                setSelectedMode(null);
+                setActiveMode('15s');
               }}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-xs font-bold rounded-xl transition-all shadow-md active:scale-95"
             >
@@ -888,185 +922,162 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             <span className="text-[10px] text-brand-secondary font-bold bg-brand-secondary/15 px-2.5 py-0.5 rounded-md inline-block">#{liveCategory}</span>
           </div>
 
-          {/* Interactive Comments & Actions block (TikTok Style) */}
-          <div className="relative z-10 mt-auto flex flex-col space-y-4">
-            
-            {/* Active Comments timeline */}
-            <div className="max-h-48 overflow-y-auto space-y-2 px-2 text-right flex flex-col items-end">
-              {liveComments.map((comment, index) => (
-                <div key={index} className="text-xs bg-black/45 backdrop-blur-md p-2 px-3 rounded-2xl inline-block max-w-[85%] text-right font-medium text-slate-100">
-                  <p>{comment}</p>
+          {/* Comments list panel */}
+          <div className="mt-auto relative z-10 p-3 space-y-2.5">
+            <div className="max-h-48 overflow-y-auto space-y-2 flex flex-col justify-end">
+              {liveComments.map((comment, i) => (
+                <div key={i} className="p-2 bg-black/40 backdrop-blur-sm rounded-xl text-right text-xs max-w-xs ml-auto border border-white/5 animate-slideUp">
+                  <p className="text-slate-100 font-semibold">{comment}</p>
                 </div>
               ))}
             </div>
 
-            {/* Actions Bar */}
-            <div className="flex items-center gap-3 w-full px-2 pb-safe mb-2">
-              {/* Hearts button */}
-              <button
-                type="button"
+            {/* Bottom Row action interactions */}
+            <div className="flex items-center gap-2 pt-2">
+              <button 
                 onClick={handleAddLiveHeart}
-                className="w-12 h-12 rounded-full bg-brand-primary text-white flex items-center justify-center text-xl shadow-lg shadow-brand-primary/10 hover:opacity-90 active:scale-75 transition-all shrink-0"
-                title="أرسل تفاعلاً"
+                className="w-11 h-11 bg-white/10 hover:bg-white/20 backdrop-blur-md text-xl rounded-xl flex items-center justify-center active:scale-75 transition-transform"
               >
                 ❤️
               </button>
-
               <input
                 type="text"
-                placeholder="أرسل رسالة تفاعلية للبث المباشر..."
+                placeholder="أرسل رداً فورياً للبث المباشر..."
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                    const text = e.currentTarget.value.trim();
-                    setLiveComments(prev => [...prev, `أنت: ${text}`].slice(-5));
-                    e.currentTarget.value = '';
+                  if (e.key === 'Enter') {
+                    setLiveComments(prev => [...prev, `أنت: ${(e.target as HTMLInputElement).value}`].slice(-5));
+                    (e.target as HTMLInputElement).value = '';
                   }
                 }}
-                className="flex-1 h-12 px-4 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl text-xs text-white text-right focus:outline-none placeholder-slate-400"
+                className="flex-1 h-11 px-4 bg-black/50 backdrop-blur-md border border-white/10 focus:outline-none rounded-xl text-xs text-white text-right"
               />
             </div>
-
           </div>
 
         </div>
       )}
 
-      {/* 5. TWITTER SPACE / CLUBHOUSE INTERACTIVE AUDIO SPACE SIMULATOR */}
+      {/* ===================== VIEW F: AUDIO SPACE STUDIO ===================== */}
       {showAudioRoomSimulator && (
-        <div className="fixed inset-0 z-[150] flex flex-col bg-slate-950 text-slate-100 p-6 overflow-hidden">
-          {/* Animated colorful backdrop */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-brand-primary/10 via-slate-950 to-brand-secondary/10 opacity-60 z-0" />
-
-          {/* Top Bar Navigation */}
-          <div className="relative z-10 flex items-center justify-between mt-2">
-            <button
-              onClick={() => {
-                setShowAudioRoomSimulator(false);
-                setSelectedMode(null);
-              }}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 text-slate-300"
+        <div className="fixed inset-0 z-[150] flex flex-col bg-[#0b0c16] text-white p-6 justify-between">
+          
+          {/* Header */}
+          <div className="flex justify-between items-center border-b border-slate-900 pb-4">
+            <button 
+              onClick={() => { setShowAudioRoomSimulator(false); setActiveMode('15s'); }}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl"
             >
-              مغادرة المجلس الصوتي 🚪
+              غادر بهدوء 👋
             </button>
-
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
-              <span className="text-[11px] font-bold text-slate-300">مجلس صوتي مباشر</span>
+            <div className="text-right">
+              <h3 className="text-xs font-bold text-slate-400">مجلس حواري صوتي مباشر</h3>
+              <p className="text-[10px] text-emerald-400 font-bold">بإدارة منصة نبض السحابية</p>
             </div>
           </div>
 
-          {/* Room Title */}
-          <div className="relative z-10 text-right mt-8 space-y-2">
-            <h2 className="text-base font-extrabold text-white">{audioRoomName}</h2>
-            <div className="flex gap-2 justify-end text-[10px] text-slate-400">
-              <span>🎤 {audioSpeakersCount} متحدثين</span>
-              <span>•</span>
-              <span>👥 48 مستمعاً نشطاً</span>
-            </div>
-          </div>
-
-          {/* Speakers grid (High-Fidelity Circular Layout) */}
-          <div className="relative z-10 mt-10 grid grid-cols-3 gap-6 justify-center">
-            
-            {/* Host - The logged-in user */}
-            <div className="flex flex-col items-center space-y-2 text-center">
-              <div className="relative">
-                {/* Pulsating Concentric Sound Wave Animation */}
-                {!isMicMuted && (
-                  <div className="absolute -inset-1 rounded-full bg-brand-primary/40 animate-ping" />
-                )}
-                <img
-                  src={currentUser?.avatar || "/src/assets/images/avatar_premium_1790855716859.jpg"}
-                  alt="Host avatar"
-                  className="relative z-10 w-16 h-16 rounded-full object-cover border-2 border-brand-primary shadow-lg"
-                />
-                <span className="absolute bottom-0 right-0 z-20 text-[10px] bg-brand-primary text-white font-bold px-1.5 py-0.5 rounded-md">مضيف</span>
-              </div>
-              <span className="text-xs font-bold text-white truncate max-w-[80px]">أنت</span>
-              <span className="text-[9px] text-slate-400">
-                {isMicMuted ? '🎙️ مكتوم' : '🎤 يتحدث...'}
-              </span>
-            </div>
-
-            {/* Speaker 2 - Sarah */}
-            <div className="flex flex-col items-center space-y-2 text-center">
-              <div className="relative">
-                <div className="absolute -inset-1 rounded-full bg-brand-secondary/40 animate-pulse" />
-                <img
-                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150"
-                  alt="Sarah avatar"
-                  className="relative z-10 w-16 h-16 rounded-full object-cover border-2 border-slate-800 shadow-lg"
-                />
-              </div>
-              <span className="text-xs font-bold text-slate-200">سارة المهندس</span>
-              <span className="text-[9px] text-slate-400">🎤 يتحدث...</span>
-            </div>
-
-            {/* Speaker 3 - Youssef */}
-            <div className="flex flex-col items-center space-y-2 text-center">
-              <div className="relative">
-                <img
-                  src="/src/assets/images/avatar_premium_1790855716859.jpg"
-                  alt="Youssef avatar"
-                  className="relative z-10 w-16 h-16 rounded-full object-cover border-2 border-slate-800 shadow-lg"
-                />
-              </div>
-              <span className="text-xs font-bold text-slate-200">يوسف العتيبي</span>
-              <span className="text-[9px] text-slate-400">🎙️ مكتوم</span>
-            </div>
-
-          </div>
-
-          {/* Listening Audience partition */}
-          <div className="relative z-10 mt-12 flex-1 text-right">
-            <h3 className="text-xs font-bold text-slate-400 mb-4">المستمعون (48)</h3>
-            
-            <div className="grid grid-cols-4 gap-4 max-h-48 overflow-y-auto">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="flex flex-col items-center space-y-1">
-                  <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100"
-                    alt="Listener avatar"
-                    className="w-10 h-10 rounded-full object-cover opacity-60 border border-slate-900"
-                    onError={(e) => {
-                      e.currentTarget.src = "/src/assets/images/avatar_premium_1790855716859.jpg";
-                    }}
-                  />
-                  <span className="text-[10px] text-slate-400 truncate max-w-[60px]">مستمع_{i+1}</span>
+          {/* Speakers Grid representation */}
+          <div className="flex-1 flex flex-col justify-center items-center py-6 space-y-6">
+            <div className="grid grid-cols-3 gap-6 max-w-sm w-full">
+              
+              {/* Host Speaker */}
+              <div className="flex flex-col items-center text-center space-y-1">
+                <div className="relative p-1 rounded-full border-2 border-brand-primary animate-pulse">
+                  <img src={currentUser?.avatar || '/src/assets/images/avatar_premium_1790855716859.jpg'} className="w-14 h-14 rounded-full object-cover" />
+                  <span className="absolute bottom-0 right-0 bg-brand-primary p-1 rounded-full text-[8px] font-extrabold text-white">مضيف</span>
                 </div>
-              ))}
+                <span className="text-[10px] font-bold text-white truncate max-w-[64px]">{currentUser?.displayName || 'أنت'}</span>
+              </div>
+
+              {/* Guest 1 */}
+              <div className="flex flex-col items-center text-center space-y-1">
+                <div className="relative p-1 rounded-full border border-brand-secondary">
+                  <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150" className="w-14 h-14 rounded-full object-cover" />
+                  <span className="absolute bottom-0 right-0 bg-brand-secondary p-1 rounded-full text-[8px] font-extrabold text-slate-950">متحدث</span>
+                </div>
+                <span className="text-[10px] font-bold text-slate-300">سارة المهندس</span>
+              </div>
+
+              {/* Guest 2 */}
+              <div className="flex flex-col items-center text-center space-y-1">
+                <div className="relative p-1 rounded-full border border-slate-700">
+                  <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150" className="w-14 h-14 rounded-full object-cover" />
+                  <span className="absolute bottom-0 right-0 bg-slate-800 p-1 rounded-full text-[8px] font-extrabold text-slate-400">متحدث</span>
+                </div>
+                <span className="text-[10px] font-bold text-slate-300">فيصل الرحال</span>
+              </div>
+
+            </div>
+
+            <div className="text-center space-y-1">
+              <h2 className="text-sm font-bold text-slate-200">{audioRoomName}</h2>
+              <span className="text-[9px] text-slate-500 block font-mono">الحد الأقصى للمستمعين: {audioSpeakersCount} / 25 مستمع</span>
+            </div>
+
+            {/* Waveform graphic */}
+            <div className="flex items-center gap-1 h-12">
+              <span className="w-1 h-8 bg-brand-primary rounded-full animate-pulse" />
+              <span className="w-1 h-12 bg-brand-secondary rounded-full animate-pulse delay-75" />
+              <span className="w-1 h-6 bg-brand-primary rounded-full animate-pulse delay-150" />
+              <span className="w-1 h-10 bg-brand-secondary rounded-full animate-pulse delay-100" />
+              <span className="w-1 h-4 bg-brand-primary rounded-full animate-pulse" />
             </div>
           </div>
 
-          {/* Bottom Audio controls */}
-          <div className="relative z-10 mt-auto bg-slate-900/80 backdrop-blur-md p-4 rounded-3xl border border-slate-850 flex items-center justify-between">
-            <button
-              onClick={() => {
-                setShowAudioRoomSimulator(false);
-                setSelectedMode(null);
-              }}
-              className="px-5 py-2.5 bg-red-600/10 border border-red-500/20 text-red-400 text-xs font-bold rounded-2xl hover:bg-red-600/25 transition-all"
+          {/* Space Controls (Mute / mic options) */}
+          <div className="flex items-center justify-around bg-slate-950/40 p-4 rounded-3xl border border-slate-900">
+            <button 
+              onClick={() => setIsMicMuted(!isMicMuted)}
+              className={`p-3.5 rounded-full transition-all ${
+                isMicMuted ? 'bg-red-600 text-white' : 'bg-slate-850 hover:bg-slate-800 text-emerald-400'
+              }`}
             >
-              مغادرة هادئة
+              <Mic className="w-5 h-5" />
             </button>
-
-            <div className="flex gap-4">
-              <button
-                onClick={() => setIsMicMuted(!isMicMuted)}
-                className={`w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-lg transition-all active:scale-90 ${
-                  isMicMuted 
-                    ? 'bg-red-600 text-white' 
-                    : 'bg-brand-primary text-white'
-                }`}
-              >
-                {isMicMuted ? '🔇' : '🎤'}
-              </button>
-            </div>
+            <span className="text-xs text-slate-400 font-semibold">{isMicMuted ? 'المايكروفون مكتوم 🎙️' : 'المايكروفون نشط ويبث 🟢'}</span>
           </div>
 
         </div>
       )}
 
+    </div>
+  );
+}
+
+// Sub Component: Horizontal Scrolling Mode Selector
+interface ModeSelectorProps {
+  activeMode: ModeType;
+  onChange: (mode: ModeType) => void;
+}
+
+function ModeSelector({ activeMode, onChange }: ModeSelectorProps) {
+  const modesList: { id: ModeType; name: string }[] = [
+    { id: 'text', name: 'نص ✍️' },
+    { id: 'image', name: 'صورة 💫' },
+    { id: '15s', name: '15 ثانية ⏱️' },
+    { id: '60s', name: '60 ثانية ⏱️' },
+    { id: '10m', name: '10 دقائق ⏱️' },
+    { id: 'live', name: 'LIVE 🔴' },
+    { id: 'audio_room', name: 'المجلس 🎤' }
+  ];
+
+  return (
+    <div className="w-full overflow-x-auto no-scrollbar py-2 text-center select-none">
+      <div className="flex flex-row-reverse items-center justify-center gap-5 px-6 whitespace-nowrap">
+        {modesList.map(mode => (
+          <button
+            key={mode.id}
+            type="button"
+            onClick={() => onChange(mode.id)}
+            className={`text-xs font-extrabold pb-1 transition-all ${
+              activeMode === mode.id 
+                ? 'text-brand-primary border-b-2 border-brand-primary scale-105' 
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {mode.name}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
