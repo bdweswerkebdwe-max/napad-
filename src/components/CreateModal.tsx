@@ -63,6 +63,46 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     'أمل الشمري: موضوع رائع جداً ومفيد للجميع ✨',
   ]);
 
+  // Real Camera and Microphone Stream State
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const cameraPreviewRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (selectedMode === 'video' || selectedMode === 'live') {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+          setCameraStream(stream);
+        })
+        .catch(err => {
+          console.warn("Camera/Microphone access was denied or unavailable:", err);
+        });
+    } else if (selectedMode === 'audio_room') {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          setCameraStream(stream);
+        })
+        .catch(err => {
+          console.warn("Microphone access was denied or unavailable:", err);
+        });
+    } else {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        setCameraStream(null);
+      }
+    }
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [selectedMode, showLiveSimulator]);
+
+  useEffect(() => {
+    if (cameraStream && cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, selectedMode, showLiveSimulator]);
+
   const handleAddLiveHeart = () => {
     const emojis = ['❤️', '💖', '🔥', '✨', '😍', '👏', '💥', '💯'];
     const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
@@ -499,8 +539,17 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                                   ))}
                                 </div>
 
-                                {/* Simulated Camera view background */}
-                                <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 to-black/25 z-0" />
+                                {/* Real live camera preview stream element */}
+                                <video
+                                  ref={cameraPreviewRef}
+                                  autoPlay
+                                  playsInline
+                                  muted
+                                  className="absolute inset-0 w-full h-full object-cover z-0"
+                                />
+
+                                {/* Simulated Camera view background scrim */}
+                                <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 to-black/30 z-10 pointer-events-none" />
 
                                 {/* Ticking REC Dot */}
                                 <div className="absolute top-3 right-4 z-10 flex items-center gap-1.5 bg-black/50 px-2 py-1 rounded-full text-white text-[10px] font-bold">
@@ -792,12 +841,14 @@ export default function CreateModal({ onClose }: CreateModalProps) {
       {showLiveSimulator && (
         <div className="fixed inset-0 z-[150] flex flex-col bg-slate-950 text-white p-4">
           
-          {/* Simulated Video Feed background (abstract mesh) */}
-          <div className="absolute inset-0 z-0">
-            <img 
-              src="/src/assets/images/welcome_abstract_1790855671657.jpg" 
-              alt="Live feed simulation" 
-              className="w-full h-full object-cover filter brightness-[0.4]"
+          {/* Real Live Video Feed background */}
+          <div className="absolute inset-0 z-0 bg-black">
+            <video
+              ref={cameraPreviewRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover opacity-75"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50" />
           </div>

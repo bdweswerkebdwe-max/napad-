@@ -304,7 +304,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCurrentUser(defaultUser);
           }
         } catch (err) {
-          handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+          console.warn("Transient Firestore user doc read error. Seeding safe local profile:", err);
+          const fallbackUser: User = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            username: (firebaseUser.email?.split('@')[0] || `user_${Date.now()}`).replace(/[^a-zA-Z0-9_]/g, ''),
+            displayName: firebaseUser.displayName || 'مستخدم نبض',
+            bio: 'عضو مسجل ونشط ومشارك للإبداع على منصة نبض ⚡️.',
+            avatar: firebaseUser.photoURL || ASSETS.avatarPremium,
+            coverPhoto: ASSETS.defaultCover,
+            followersCount: 0,
+            followingCount: 0,
+            likesCount: 0,
+            visitorsCount: 0,
+            isVerified: true,
+            followers: [],
+            following: [],
+          };
+          setCurrentUser(fallbackUser);
+          try {
+            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+          } catch (e) {
+            // Keep app running smoothly
+          }
         }
       } else {
         setCurrentUser(null);

@@ -4,6 +4,46 @@ import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, RefreshCw, Volume2 } fro
 
 export default function CallOverlay() {
   const { activeCall, answerCall, declineCall, endCall } = useApp();
+  const [callStream, setCallStream] = React.useState<MediaStream | null>(null);
+  const localVideoRef = React.useRef<HTMLVideoElement>(null);
+
+  React.useEffect(() => {
+    if (activeCall.isOpen && activeCall.status === 'connected') {
+      if (activeCall.type === 'video') {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            setCallStream(stream);
+          })
+          .catch(err => {
+            console.warn("Camera access denied during call:", err);
+          });
+      } else {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(stream => {
+            setCallStream(stream);
+          })
+          .catch(err => {
+            console.warn("Microphone access denied during call:", err);
+          });
+      }
+    } else {
+      if (callStream) {
+        callStream.getTracks().forEach(track => track.stop());
+        setCallStream(null);
+      }
+    }
+    return () => {
+      if (callStream) {
+        callStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [activeCall.isOpen, activeCall.status, activeCall.type]);
+
+  React.useEffect(() => {
+    if (callStream && localVideoRef.current) {
+      localVideoRef.current.srcObject = callStream;
+    }
+  }, [callStream, activeCall.status]);
 
   if (!activeCall.isOpen || !activeCall.user) return null;
 
@@ -63,13 +103,15 @@ export default function CallOverlay() {
         {/* If Video Call & Connected - show interactive mockup frame */}
         {type === 'video' && status === 'connected' && (
           <div className="relative w-72 aspect-video bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl mt-4">
-            <img 
-              src="/src/assets/images/welcome_abstract_1790855671657.jpg" 
-              alt="My camera" 
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
               className="absolute inset-0 w-full h-full object-cover opacity-80"
             />
-            <div className="absolute bottom-2 right-2 p-1 bg-black/60 rounded-lg text-[9px] font-bold">
-              كاميرتك (سيلفي)
+            <div className="absolute bottom-2 right-2 p-1 bg-black/60 rounded-lg text-[9px] font-bold z-10">
+              كاميرتك المباشرة (سيلفي) 📸
             </div>
             
             {/* Picture in Picture of participant */}
