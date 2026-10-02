@@ -45,3 +45,27 @@
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
+
+/* Simulated Live Floating Hearts Animation */
+@keyframes floatHeart {
+  0% {
+    transform: translateY(0) scale(0.6) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-150px) scale(1.1) rotate(-15deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-350px) scale(1.3) rotate(15deg);
+    opacity: 0;
+  }
+}
+
+.floating-heart {
+  position: absolute;
+  bottom: 80px;
+  animation: floatHeart 2.5s cubic-bezier(0.08, 0.8, 0.12, 1) forwards;
+  pointer-events: none;
+  z-index: 50;
+}

@@ -11,8 +11,8 @@ export default function Profile() {
     currentUser, posts, logout, updateProfile, settings, updateSettings, visitors 
   } = useApp();
 
-  // Drawers/Modals: 'none' | 'settings' | 'visitors' | 'edit_profile'
-  const [activeDrawer, setActiveDrawer] = useState<'none' | 'settings' | 'visitors' | 'edit_profile'>('none');
+  // Drawers/Modals: 'none' | 'settings' | 'visitors' | 'edit_profile' | 'analytics'
+  const [activeDrawer, setActiveDrawer] = useState<'none' | 'settings' | 'visitors' | 'edit_profile' | 'analytics'>('none');
   
   // Profile Bottom Tabs: 'my_videos' | 'my_posts' | 'liked_posts'
   const [profileTab, setProfileTab] = useState<'my_videos' | 'my_posts' | 'liked_posts'>('my_posts');
@@ -93,13 +93,22 @@ export default function Profile() {
         {/* 2B. Name, Edit button and stats */}
         <div className="px-6 pt-12 text-right space-y-4">
           <div className="flex justify-between items-start">
-            <button
-              onClick={() => setActiveDrawer('edit_profile')}
-              className="flex items-center gap-1.5 px-4 py-2 bg-brand-primary text-white text-xs font-bold rounded-xl hover:opacity-95 shadow-lg shadow-brand-primary/10 active:scale-95 transition-all"
-            >
-              <span>تعديل الحساب</span>
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveDrawer('edit_profile')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-200 text-xs font-bold rounded-xl hover:bg-slate-850 active:scale-95 transition-all"
+              >
+                <span>تعديل الحساب</span>
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={() => setActiveDrawer('analytics')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-brand-primary text-white text-xs font-bold rounded-xl hover:opacity-95 shadow-lg shadow-brand-primary/10 active:scale-95 transition-all"
+              >
+                <span>التحليلات 📊</span>
+              </button>
+            </div>
 
             <div className="text-right">
               <h2 className="text-lg font-extrabold text-white">{currentUser.displayName}</h2>
@@ -435,6 +444,128 @@ export default function Profile() {
               </button>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2F. CREATOR ANALYTICS DRAWER */}
+      {activeDrawer === 'analytics' && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm">
+          <div className="absolute inset-0" onClick={() => setActiveDrawer('none')} />
+          
+          <div className="relative w-full max-w-md h-full bg-[#0b0f19] border-l border-slate-900 shadow-2xl flex flex-col animate-slide-in">
+            {/* Drawer Header */}
+            <div className="sticky top-0 z-10 bg-[#0b0f19]/80 backdrop-blur-md border-b border-slate-900 p-4 flex items-center justify-between">
+              <button 
+                onClick={() => setActiveDrawer('none')}
+                className="w-8 h-8 rounded-full bg-slate-900 hover:bg-slate-850 flex items-center justify-center text-slate-400"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <h3 className="text-sm font-bold text-slate-200">لوحة تحليلات منشئ المحتوى 📊</h3>
+            </div>
+
+            {/* Content list */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 text-right">
+              
+              {/* Stat Boxes Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-950/60 border border-slate-900 rounded-2xl">
+                  <span className="text-[10px] text-slate-500 font-bold block">مجموع المشاهدات الأسبوعية</span>
+                  <p className="text-xl font-extrabold text-white mt-1 font-mono">14,280</p>
+                  <span className="text-[9px] text-emerald-400 font-bold block mt-0.5">📈 +12.4% عن الأسبوع الماضي</span>
+                </div>
+                <div className="p-4 bg-slate-950/60 border border-slate-900 rounded-2xl">
+                  <span className="text-[10px] text-slate-500 font-bold block">تفاعل الجمهور</span>
+                  <p className="text-xl font-extrabold text-white mt-1 font-mono">8.4%</p>
+                  <span className="text-[9px] text-emerald-400 font-bold block mt-0.5">📈 +2.1% تقدم إيجابي</span>
+                </div>
+              </div>
+
+              {/* Views Performance Chart (Custom SVG Sparkline Chart) */}
+              <div className="p-5 bg-slate-950/60 border border-slate-900 rounded-2xl space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-slate-400 font-bold bg-slate-900 px-2 py-0.5 rounded">٧ أيام مضت</span>
+                  <h4 className="text-xs font-bold text-slate-200">نمو مشاهدات المقاطع القصيرة</h4>
+                </div>
+                
+                {/* Custom Sparkline Chart SVG */}
+                <div className="h-28 w-full pt-4">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 100 30" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="chart-grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d="M 0 30 L 0 20 Q 20 10 35 15 T 70 8 T 100 2 L 100 30 Z"
+                      fill="url(#chart-grad)"
+                    />
+                    <path
+                      d="M 0 20 Q 20 10 35 15 T 70 8 T 100 2"
+                      fill="none"
+                      stroke="#4f46e5"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="100" cy="2" r="1.5" fill="#10b981" />
+                  </svg>
+                </div>
+                
+                {/* Chart Labels */}
+                <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                  <span>الجمعة</span>
+                  <span>الأربعاء</span>
+                  <span>الاثنين</span>
+                  <span>السبت</span>
+                </div>
+              </div>
+
+              {/* Best Posting Hours */}
+              <div className="p-5 bg-slate-950/60 border border-slate-900 rounded-2xl space-y-4">
+                <h4 className="text-xs font-bold text-slate-200">الساعات الذهبية لنشر المحتوى 🔥</h4>
+                
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-emerald-400 font-bold font-mono">ممتاز جداً 🌟</span>
+                    <span className="text-xs font-bold text-slate-300">08:00 مساءً - 10:00 مساءً</span>
+                  </div>
+                  <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-brand-primary h-full w-[95%] rounded-full" />
+                  </div>
+                  
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] text-emerald-400 font-bold font-mono">متفاعل ونشط 👍</span>
+                    <span className="text-xs font-bold text-slate-300">04:00 مساءً - 06:00 مساءً</span>
+                  </div>
+                  <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-brand-secondary h-full w-[70%] rounded-full" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Top Audience locations */}
+              <div className="p-5 bg-slate-950/60 border border-slate-900 rounded-2xl space-y-3">
+                <h4 className="text-xs font-bold text-slate-200">البلدان والمدن الأكثر تفاعلاً</h4>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="font-mono text-slate-400">65%</span>
+                    <span className="text-slate-200">الرياض، المملكة العربية السعودية 🇸🇦</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="font-mono text-slate-400">18%</span>
+                    <span className="text-slate-200">جدة، المملكة العربية السعودية 🇸🇦</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="font-mono text-slate-400">12%</span>
+                    <span className="text-slate-200">دبي، الإمارات العربية المتحدة 🇦🇪</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}

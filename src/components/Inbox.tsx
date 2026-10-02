@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { useApp, Chat, Story, Notification, User } from '../context/AppContext';
+import React, { useState, useEffect } from 'react';
+import { useApp, Chat, Story, Notification, User, Message } from '../context/AppContext';
 import { 
   MessageSquare, Bell, Phone, Video as VideoIcon, Send, BookOpen, 
   ChevronLeft, ArrowRight, Eye, Sparkles, Volume2, Smile, Mic, Radio, ShieldAlert, CheckCircle2, Plus
 } from 'lucide-react';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export default function Inbox() {
   const { 
@@ -22,6 +24,30 @@ export default function Inbox() {
   const handleOpenChat = (chat: Chat) => {
     setActiveChat(chat);
   };
+
+  // Real-time Firestore DM sync subscription
+  useEffect(() => {
+    if (!activeChat) return;
+
+    const messagesQuery = query(
+      collection(db, `chats/${activeChat.id}/messages`),
+      orderBy('timestamp', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const messagesList: Message[] = [];
+      snapshot.forEach(doc => {
+        messagesList.push({ ...(doc.data() as Message), id: doc.id });
+      });
+      if (messagesList.length > 0) {
+        setActiveChat(prev => prev ? { ...prev, messages: messagesList } : null);
+      }
+    }, (error) => {
+      console.error("Error subscribing to live DMs:", error);
+    });
+
+    return () => unsubscribe();
+  }, [activeChat?.id]);
 
   const handleSendMsgSubmit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -12,10 +12,27 @@ interface CreateModalProps {
 type CreateTab = 'video' | 'live' | 'audio_room' | 'story' | 'post';
 
 export default function CreateModal({ onClose }: CreateModalProps) {
-  const { createNewPost, createStory, currentUser } = useApp();
+  const { createNewPost, createStory, currentUser, uploadFileToStorage } = useApp();
   
   // High-fidelity flow: First select the isolated type, then open its custom form!
   const [selectedMode, setSelectedMode] = useState<CreateTab | null>(null);
+  
+  // Real File Upload handler
+  const handleRealFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const url = await uploadFileToStorage(file, selectedMode === 'video' ? 'videos' : 'images');
+      setMediaUrl(url);
+      alert('تم رفع الملف بنجاح وتوليد الرابط وحفظه في Firebase Storage! 🟢');
+    } catch (err) {
+      console.error(err);
+      alert('فشل رفع الملف إلى المستودع السحابي. يرجى مراجعة إعدادات الأمان في Firebase.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
   
   // Form State
   const [content, setContent] = useState('');
@@ -28,6 +45,55 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [liveTitle, setLiveTitle] = useState('بث مباشر تفاعلي لمشاركة اللحظة ⚡️');
   const [liveCategory, setLiveCategory] = useState('ألعاب ومناقشات');
   
+  // Live Simulator state for dynamic hearts and scrolling comments
+  const [showLiveSimulator, setShowLiveSimulator] = useState(false);
+  const [showAudioRoomSimulator, setShowAudioRoomSimulator] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [liveHearts, setLiveHearts] = useState<{ id: number; left: number; emoji: string }[]>([]);
+  const [liveComments, setLiveComments] = useState<string[]>([
+    'خالد الحربي: السلام عليكم يا مبدع، منور البث! 👋',
+    'أمل الشمري: موضوع رائع جداً ومفيد للجميع ✨',
+  ]);
+
+  const handleAddLiveHeart = () => {
+    const emojis = ['❤️', '💖', '🔥', '✨', '😍', '👏', '💥', '💯'];
+    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+    const newHeart = {
+      id: Date.now() + Math.random(),
+      left: Math.random() * 80 + 10, // random percent left
+      emoji: randomEmoji,
+    };
+    setLiveHearts(prev => [...prev, newHeart]);
+    
+    // Automatically prune old hearts after animation ends
+    setTimeout(() => {
+      setLiveHearts(prev => prev.filter(h => h.id !== newHeart.id));
+    }, 2500);
+  };
+
+  React.useEffect(() => {
+    if (!showLiveSimulator) return;
+
+    const mockComments = [
+      'فيصل الرحال: تصوير ممتاز وبث مشوق جداً ☕️',
+      'سارة المهندس: منور يا بطل، بالتوفيق في مشاريعك القادمة 💻🚀',
+      'يوسف العتيبي: ما شاء الله، ربي يسعدك ويوفقك 🌟',
+      'عبدالله المطيري: هل هذا البث برعاية منصة نبض؟ 🤔',
+      'ريم عبدالله: الإضاءة مذهلة جداً والفكرة جميلة جداً ✨',
+      'محمد عسيري: تحية لك من جنوب المملكة يا غالي 🤍',
+      'منار العتيبي: مبدع دائماً، استمر بمشاركة الأفكار 👍',
+      'خالد الحربي: كيف يمكنني الانضمام للتحدث معك؟ 🎙️',
+      'نورة السديري: رائع جداً! استمع بتركيز وشغف.'
+    ];
+
+    const interval = setInterval(() => {
+      const randomComment = mockComments[Math.floor(Math.random() * mockComments.length)];
+      setLiveComments(prev => [...prev, randomComment].slice(-5)); // keep last 5
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [showLiveSimulator]);
+
   // Audio Room State
   const [audioRoomName, setAudioRoomName] = useState('مجلس نبض الثقافي والتقني 🎤');
   const [audioSpeakersCount, setAudioSpeakersCount] = useState('5');
@@ -110,9 +176,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     } else if (selectedMode === 'story') {
       createStory(mediaUrl);
     } else if (selectedMode === 'live') {
-      alert(`🔴 تم إطلاق بثك المباشر بعنوان "${liveTitle}" بنجاح! جاري تحضير الكاميرا...`);
+      setShowLiveSimulator(true);
+      return; // Do not close, show the interactive live stream simulator overlay!
     } else if (selectedMode === 'audio_room') {
-      alert(`🎤 تم تفعيل غرفتك الصوتية "${audioRoomName}" بنجاح! المتحدثون جاهزون.`);
+      setShowAudioRoomSimulator(true);
+      return; // Do not close, show the interactive Twitter Space style Audio Room overlay!
     }
 
     setSuccessMsg('تم النشر وتحديث التغذية بنجاح! 🎉');
@@ -356,14 +424,31 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                             <p className="text-xs text-slate-300 font-semibold">اسحب وأفلت الملفات هنا</p>
                             <p className="text-[10px] text-slate-500">يدعم صيغ MP4 للفيديو وصيغ PNG, JPG للصور</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={handleMockUpload}
-                            disabled={isUploading}
-                            className="px-4 py-2 bg-slate-850 hover:bg-slate-800 rounded-xl text-xs text-slate-200 font-bold transition-all active:scale-95 border border-slate-800"
-                          >
-                            {isUploading ? 'جاري التحميل والمحاكاة...' : 'اختر ملفاً تجريبياً'}
-                          </button>
+                          <div className="flex gap-2.5">
+                            <label
+                              htmlFor="real-file-picker"
+                              className="px-4 py-2.5 bg-brand-primary text-white rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md shadow-brand-primary/10"
+                            >
+                              {isUploading ? 'جاري رفع الملف...' : 'اختر ملفاً حقيقياً سحابياً 📁'}
+                            </label>
+                            <input
+                              type="file"
+                              id="real-file-picker"
+                              onChange={handleRealFileUpload}
+                              disabled={isUploading}
+                              accept={selectedMode === 'video' ? 'video/*' : 'image/*'}
+                              className="hidden"
+                            />
+                            
+                            <button
+                              type="button"
+                              onClick={handleMockUpload}
+                              disabled={isUploading}
+                              className="px-4 py-2.5 bg-slate-850 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold transition-all active:scale-95 border border-slate-800"
+                            >
+                              استخدم ملفاً تجريبياً سريعاً ⚡️
+                            </button>
+                          </div>
                         </>
                       )}
                     </div>
@@ -553,6 +638,235 @@ export default function CreateModal({ onClose }: CreateModalProps) {
         )}
 
       </div>
+
+      {/* 4. FULLSCREEN INTERACTIVE LIVE STREAM SIMULATOR */}
+      {showLiveSimulator && (
+        <div className="fixed inset-0 z-[150] flex flex-col bg-slate-950 text-white p-4">
+          
+          {/* Simulated Video Feed background (abstract mesh) */}
+          <div className="absolute inset-0 z-0">
+            <img 
+              src="/src/assets/images/welcome_abstract_1790855671657.jpg" 
+              alt="Live feed simulation" 
+              className="w-full h-full object-cover filter brightness-[0.4]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50" />
+          </div>
+
+          {/* Simulated Floating Hearts rising */}
+          {liveHearts.map(heart => (
+            <div
+              key={heart.id}
+              className="floating-heart text-2xl"
+              style={{ left: `${heart.left}%` }}
+            >
+              {heart.emoji}
+            </div>
+          ))}
+
+          {/* Top Bar info */}
+          <div className="relative z-10 flex items-center justify-between mt-2 px-2">
+            <button
+              onClick={() => {
+                setShowLiveSimulator(false);
+                setSelectedMode(null);
+              }}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-xs font-bold rounded-xl transition-all shadow-md active:scale-95"
+            >
+              إنهاء البث 🔴
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] bg-red-600 text-white font-bold px-2.5 py-1.5 rounded-lg animate-pulse">مباشر LIVE</span>
+              <span className="text-[10px] bg-black/40 backdrop-blur-md px-2.5 py-1.5 rounded-lg font-mono">👁️ 1,240</span>
+            </div>
+          </div>
+
+          {/* Title description in top-right */}
+          <div className="relative z-10 text-right mt-6 px-2 space-y-1">
+            <h3 className="text-sm font-extrabold text-white">{liveTitle}</h3>
+            <span className="text-[10px] text-brand-secondary font-bold bg-brand-secondary/15 px-2.5 py-0.5 rounded-md inline-block">#{liveCategory}</span>
+          </div>
+
+          {/* Interactive Comments & Actions block (TikTok Style) */}
+          <div className="relative z-10 mt-auto flex flex-col space-y-4">
+            
+            {/* Active Comments timeline */}
+            <div className="max-h-48 overflow-y-auto space-y-2 px-2 text-right flex flex-col items-end">
+              {liveComments.map((comment, index) => (
+                <div key={index} className="text-xs bg-black/45 backdrop-blur-md p-2 px-3 rounded-2xl inline-block max-w-[85%] text-right font-medium text-slate-100">
+                  <p>{comment}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Actions Bar */}
+            <div className="flex items-center gap-3 w-full px-2 pb-safe mb-2">
+              {/* Hearts button */}
+              <button
+                type="button"
+                onClick={handleAddLiveHeart}
+                className="w-12 h-12 rounded-full bg-brand-primary text-white flex items-center justify-center text-xl shadow-lg shadow-brand-primary/10 hover:opacity-90 active:scale-75 transition-all shrink-0"
+                title="أرسل تفاعلاً"
+              >
+                ❤️
+              </button>
+
+              <input
+                type="text"
+                placeholder="أرسل رسالة تفاعلية للبث المباشر..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                    const text = e.currentTarget.value.trim();
+                    setLiveComments(prev => [...prev, `أنت: ${text}`].slice(-5));
+                    e.currentTarget.value = '';
+                  }
+                }}
+                className="flex-1 h-12 px-4 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl text-xs text-white text-right focus:outline-none placeholder-slate-400"
+              />
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* 5. TWITTER SPACE / CLUBHOUSE INTERACTIVE AUDIO SPACE SIMULATOR */}
+      {showAudioRoomSimulator && (
+        <div className="fixed inset-0 z-[150] flex flex-col bg-slate-950 text-slate-100 p-6 overflow-hidden">
+          {/* Animated colorful backdrop */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-brand-primary/10 via-slate-950 to-brand-secondary/10 opacity-60 z-0" />
+
+          {/* Top Bar Navigation */}
+          <div className="relative z-10 flex items-center justify-between mt-2">
+            <button
+              onClick={() => {
+                setShowAudioRoomSimulator(false);
+                setSelectedMode(null);
+              }}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 text-slate-300"
+            >
+              مغادرة المجلس الصوتي 🚪
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
+              <span className="text-[11px] font-bold text-slate-300">مجلس صوتي مباشر</span>
+            </div>
+          </div>
+
+          {/* Room Title */}
+          <div className="relative z-10 text-right mt-8 space-y-2">
+            <h2 className="text-base font-extrabold text-white">{audioRoomName}</h2>
+            <div className="flex gap-2 justify-end text-[10px] text-slate-400">
+              <span>🎤 {audioSpeakersCount} متحدثين</span>
+              <span>•</span>
+              <span>👥 48 مستمعاً نشطاً</span>
+            </div>
+          </div>
+
+          {/* Speakers grid (High-Fidelity Circular Layout) */}
+          <div className="relative z-10 mt-10 grid grid-cols-3 gap-6 justify-center">
+            
+            {/* Host - The logged-in user */}
+            <div className="flex flex-col items-center space-y-2 text-center">
+              <div className="relative">
+                {/* Pulsating Concentric Sound Wave Animation */}
+                {!isMicMuted && (
+                  <div className="absolute -inset-1 rounded-full bg-brand-primary/40 animate-ping" />
+                )}
+                <img
+                  src={currentUser?.avatar || "/src/assets/images/avatar_premium_1790855716859.jpg"}
+                  alt="Host avatar"
+                  className="relative z-10 w-16 h-16 rounded-full object-cover border-2 border-brand-primary shadow-lg"
+                />
+                <span className="absolute bottom-0 right-0 z-20 text-[10px] bg-brand-primary text-white font-bold px-1.5 py-0.5 rounded-md">مضيف</span>
+              </div>
+              <span className="text-xs font-bold text-white truncate max-w-[80px]">أنت</span>
+              <span className="text-[9px] text-slate-400">
+                {isMicMuted ? '🎙️ مكتوم' : '🎤 يتحدث...'}
+              </span>
+            </div>
+
+            {/* Speaker 2 - Sarah */}
+            <div className="flex flex-col items-center space-y-2 text-center">
+              <div className="relative">
+                <div className="absolute -inset-1 rounded-full bg-brand-secondary/40 animate-pulse" />
+                <img
+                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150"
+                  alt="Sarah avatar"
+                  className="relative z-10 w-16 h-16 rounded-full object-cover border-2 border-slate-800 shadow-lg"
+                />
+              </div>
+              <span className="text-xs font-bold text-slate-200">سارة المهندس</span>
+              <span className="text-[9px] text-slate-400">🎤 يتحدث...</span>
+            </div>
+
+            {/* Speaker 3 - Youssef */}
+            <div className="flex flex-col items-center space-y-2 text-center">
+              <div className="relative">
+                <img
+                  src="/src/assets/images/avatar_premium_1790855716859.jpg"
+                  alt="Youssef avatar"
+                  className="relative z-10 w-16 h-16 rounded-full object-cover border-2 border-slate-800 shadow-lg"
+                />
+              </div>
+              <span className="text-xs font-bold text-slate-200">يوسف العتيبي</span>
+              <span className="text-[9px] text-slate-400">🎙️ مكتوم</span>
+            </div>
+
+          </div>
+
+          {/* Listening Audience partition */}
+          <div className="relative z-10 mt-12 flex-1 text-right">
+            <h3 className="text-xs font-bold text-slate-400 mb-4">المستمعون (48)</h3>
+            
+            <div className="grid grid-cols-4 gap-4 max-h-48 overflow-y-auto">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="flex flex-col items-center space-y-1">
+                  <img
+                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100"
+                    alt="Listener avatar"
+                    className="w-10 h-10 rounded-full object-cover opacity-60 border border-slate-900"
+                    onError={(e) => {
+                      e.currentTarget.src = "/src/assets/images/avatar_premium_1790855716859.jpg";
+                    }}
+                  />
+                  <span className="text-[10px] text-slate-400 truncate max-w-[60px]">مستمع_{i+1}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Bottom Audio controls */}
+          <div className="relative z-10 mt-auto bg-slate-900/80 backdrop-blur-md p-4 rounded-3xl border border-slate-850 flex items-center justify-between">
+            <button
+              onClick={() => {
+                setShowAudioRoomSimulator(false);
+                setSelectedMode(null);
+              }}
+              className="px-5 py-2.5 bg-red-600/10 border border-red-500/20 text-red-400 text-xs font-bold rounded-2xl hover:bg-red-600/25 transition-all"
+            >
+              مغادرة هادئة
+            </button>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsMicMuted(!isMicMuted)}
+                className={`w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-lg transition-all active:scale-90 ${
+                  isMicMuted 
+                    ? 'bg-red-600 text-white' 
+                    : 'bg-brand-primary text-white'
+                }`}
+              >
+                {isMicMuted ? '🔇' : '🎤'}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      )}
+
     </div>
   );
 }
