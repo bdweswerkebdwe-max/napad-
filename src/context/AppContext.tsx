@@ -192,7 +192,7 @@ interface AppContextType {
   settings: AppSettings;
   
   login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, username: string, name: string) => Promise<boolean>;
+  register: (email: string, password: string, username: string, name: string) => Promise<boolean>;
   loginWithGoogle: () => Promise<boolean>;
   logout: () => void;
   resetPassword: (email: string) => Promise<string>;
@@ -574,9 +574,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const register = async (email: string, username: string, name: string): Promise<boolean> => {
+  const register = async (email: string, password: string, username: string, name: string): Promise<boolean> => {
     try {
-      const authResult = await createUserWithEmailAndPassword(auth, email, 'NabdPass123_');
+      const authResult = await createUserWithEmailAndPassword(auth, email, password);
       const newUser: User = {
         uid: authResult.user.uid,
         email: email.trim().toLowerCase(),

@@ -52,7 +52,7 @@ export default function Onboarding() {
     setError('');
     setLoading(true);
     try {
-      const successReg = await register(email, username, name);
+      const successReg = await register(email, password, username, name);
       if (!successReg) {
         setError('فشل إنشاء الحساب. قد يكون اسم المستخدم أو البريد مستخدماً بالفعل.');
       }
