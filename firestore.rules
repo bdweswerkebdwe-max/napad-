@@ -86,5 +86,12 @@ service cloud.firestore {
     match /visitors/{visitorId} {
       allow read, write: if isSignedIn();
     }
+
+    // 7. Live Sessions collection rules (Live stream / Audio Space sessions)
+    match /live_sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.hostUid == request.auth.uid;
+    }
   }
 }

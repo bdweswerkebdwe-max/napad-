@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Video, Radio, Mic, BookOpen, FileText, Image as ImageIcon, 
@@ -10,6 +10,9 @@ interface CreateModalProps {
 }
 
 type CreateTab = 'video' | 'live' | 'audio_room' | 'story' | 'post';
+
+import { db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function CreateModal({ onClose }: CreateModalProps) {
   const { createNewPost, createStory, currentUser, uploadFileToStorage } = useApp();
@@ -40,6 +43,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [privacy, setPrivacy] = useState<'public' | 'followers' | 'private'>('public');
   const [hashtagInput, setHashtagInput] = useState('');
   const [hashtags, setHashtags] = useState(['نبض', 'جديد']);
+
+  // Holding Video Record State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Live Stream State
   const [liveTitle, setLiveTitle] = useState('بث مباشر تفاعلي لمشاركة اللحظة ⚡️');
@@ -163,6 +171,41 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     }, 1200);
   };
 
+  const startRecording = () => {
+    setIsRecording(true);
+    setRecordingDuration(0);
+    const interval = setInterval(() => {
+      setRecordingDuration(prev => {
+        if (prev >= 8) {
+          clearInterval(interval);
+          return 8;
+        }
+        return prev + 0.1;
+      });
+    }, 100);
+    recordingTimerRef.current = interval;
+  };
+
+  const stopRecording = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setIsRecording(false);
+  };
+
+  useEffect(() => {
+    if (!isRecording && recordingDuration > 0) {
+      if (recordingDuration < 1.0) {
+        alert("⚠️ اضغط مطولاً للتسجيل (لمدة ثانية واحدة على الأقل).");
+        setRecordingDuration(0);
+      } else {
+        setMediaUrl('https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4');
+        alert(`🎉 تم تسجيل الفيديو بنجاح! المدة: ${recordingDuration.toFixed(1)} ثوانٍ.`);
+      }
+    }
+  }, [isRecording]);
+
   const handleSubmitPost = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMode) return;
@@ -176,9 +219,35 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     } else if (selectedMode === 'story') {
       createStory(mediaUrl);
     } else if (selectedMode === 'live') {
+      if (currentUser) {
+        const sessionId = `live_${Date.now()}`;
+        setDoc(doc(db, 'live_sessions', sessionId), {
+          id: sessionId,
+          type: 'video',
+          title: liveTitle,
+          category: liveCategory,
+          hostUid: currentUser.uid,
+          hostName: currentUser.displayName,
+          hostAvatar: currentUser.avatar,
+          timestamp: new Date().toISOString()
+        }).catch(err => console.error("Error storing live session:", err));
+      }
       setShowLiveSimulator(true);
       return; // Do not close, show the interactive live stream simulator overlay!
     } else if (selectedMode === 'audio_room') {
+      if (currentUser) {
+        const sessionId = `audio_${Date.now()}`;
+        setDoc(doc(db, 'live_sessions', sessionId), {
+          id: sessionId,
+          type: 'audio',
+          title: audioRoomName,
+          speakersCount: audioSpeakersCount,
+          hostUid: currentUser.uid,
+          hostName: currentUser.displayName,
+          hostAvatar: currentUser.avatar,
+          timestamp: new Date().toISOString()
+        }).catch(err => console.error("Error storing audio room session:", err));
+      }
       setShowAudioRoomSimulator(true);
       return; // Do not close, show the interactive Twitter Space style Audio Room overlay!
     }
@@ -400,7 +469,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                           {selectedMode === 'video' ? (
                             <div className="p-3 bg-slate-900 rounded-xl border border-slate-850 flex items-center justify-between text-left">
                               <span className="text-[10px] text-emerald-400 font-bold">تم الإعداد</span>
-                              <span className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">waves_loop_42636.mp4</span>
+                              <span className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">video_reel_captured.mp4</span>
                             </div>
                           ) : (
                             <img 
@@ -419,17 +488,97 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                         </div>
                       ) : (
                         <>
-                          <UploadCloud className="w-8 h-8 text-slate-500 animate-pulse" />
-                          <div className="space-y-1">
-                            <p className="text-xs text-slate-300 font-semibold">اسحب وأفلت الملفات هنا</p>
-                            <p className="text-[10px] text-slate-500">يدعم صيغ MP4 للفيديو وصيغ PNG, JPG للصور</p>
-                          </div>
+                          {selectedMode === 'video' ? (
+                            /* TikTok Style Hold-to-Record Simulated Camera Viewport */
+                            <div className="w-full space-y-4">
+                              <div className="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-slate-850 flex flex-col items-center justify-center">
+                                {/* Grid camera overlay */}
+                                <div className="absolute inset-0 border border-white/5 grid grid-cols-3 grid-rows-3 pointer-events-none">
+                                  {[...Array(9)].map((_, i) => (
+                                    <div key={i} className="border border-white/5" />
+                                  ))}
+                                </div>
+
+                                {/* Simulated Camera view background */}
+                                <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 to-black/25 z-0" />
+
+                                {/* Ticking REC Dot */}
+                                <div className="absolute top-3 right-4 z-10 flex items-center gap-1.5 bg-black/50 px-2 py-1 rounded-full text-white text-[10px] font-bold">
+                                  <span className={`w-2.5 h-2.5 bg-red-600 rounded-full ${isRecording ? 'animate-ping' : ''}`} />
+                                  <span>{isRecording ? 'جاري التسجيل...' : 'جاهز'}</span>
+                                </div>
+
+                                {/* Recording Duration display */}
+                                {isRecording && (
+                                  <div className="absolute top-12 left-1/2 transform -translate-x-1/2 z-10 bg-brand-primary text-white font-mono text-xs font-bold px-3 py-1 rounded-xl shadow-lg">
+                                    {recordingDuration.toFixed(1)}s / 8.0s
+                                  </div>
+                                )}
+
+                                {/* Camera Viewport graphic */}
+                                <div className="relative z-10 text-center space-y-1 select-none">
+                                  <Video className={`w-10 h-10 mx-auto ${isRecording ? 'text-red-500 scale-110 animate-pulse' : 'text-slate-500'}`} />
+                                  <p className="text-[10px] text-slate-400">كاميرا نبض المباشرة</p>
+                                </div>
+
+                                {/* Circular Hold progress indicator overlay */}
+                                {isRecording && (
+                                  <div className="absolute bottom-4 left-4 right-4 z-10">
+                                    <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-white/5">
+                                      <div 
+                                        className="bg-brand-primary h-full rounded-full transition-all duration-100" 
+                                        style={{ width: `${(recordingDuration / 8) * 100}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Interactive Hold To Record Trigger */}
+                              <div className="flex flex-col items-center space-y-2 select-none">
+                                <button
+                                  type="button"
+                                  onMouseDown={startRecording}
+                                  onMouseUp={stopRecording}
+                                  onMouseLeave={stopRecording}
+                                  onTouchStart={startRecording}
+                                  onTouchEnd={stopRecording}
+                                  className={`w-16 h-16 rounded-full border-4 border-slate-900 shadow-xl flex items-center justify-center transition-all ${
+                                    isRecording 
+                                      ? 'bg-red-600 scale-95 ring-4 ring-brand-primary/30' 
+                                      : 'bg-brand-primary hover:bg-brand-primary/90 scale-100 active:scale-95'
+                                  }`}
+                                  title="اضغط باستمرار للتسجيل"
+                                >
+                                  <span className="w-5 h-5 bg-white rounded-full" />
+                                </button>
+                                <span className="text-[11px] font-bold text-slate-300">اضغط باستمرار للتسجيل 🔴</span>
+                                <span className="text-[10px] text-slate-500">(أو ارفع ملفاً من الجوال في الأسفل)</span>
+                              </div>
+
+                              <div className="relative flex py-2 items-center justify-center">
+                                <div className="flex-grow border-t border-slate-850"></div>
+                                <span className="flex-shrink mx-4 text-[10px] text-slate-500 font-bold">أو</span>
+                                <div className="flex-grow border-t border-slate-850"></div>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <UploadCloud className="w-8 h-8 text-slate-500 animate-pulse" />
+                              <div className="space-y-1">
+                                <p className="text-xs text-slate-300 font-semibold">اسحب وأفلت الملفات هنا</p>
+                                <p className="text-[10px] text-slate-500">يدعم صيغ PNG, JPG للصور</p>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Standard File Picker from mobile/gallery */}
                           <div className="flex gap-2.5">
                             <label
                               htmlFor="real-file-picker"
                               className="px-4 py-2.5 bg-brand-primary text-white rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md shadow-brand-primary/10"
                             >
-                              {isUploading ? 'جاري رفع الملف...' : 'اختر ملفاً حقيقياً سحابياً 📁'}
+                              {isUploading ? 'جاري رفع الملف...' : 'اختر ملفاً من الجوال / الاستوديو 📁'}
                             </label>
                             <input
                               type="file"
@@ -446,7 +595,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                               disabled={isUploading}
                               className="px-4 py-2.5 bg-slate-850 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold transition-all active:scale-95 border border-slate-800"
                             >
-                              استخدم ملفاً تجريبياً سريعاً ⚡️
+                              ملف تجريبي سريع ⚡️
                             </button>
                           </div>
                         </>

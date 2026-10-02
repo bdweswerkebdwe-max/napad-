@@ -374,6 +374,37 @@ interface VideoReelItemProps {
 function VideoReelItem({ post, isMuted, currentUser, onLike, onSave, onShare, onCommentOpen, onFollow }: VideoReelItemProps) {
   const [isPlaying, setIsPlaying] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsPlaying(true);
+            video.play().catch(() => {});
+          } else {
+            setIsPlaying(false);
+            video.pause();
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (containerRef.current) {
+        observer.unobserve(containerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -394,7 +425,7 @@ function VideoReelItem({ post, isMuted, currentUser, onLike, onSave, onShare, on
   const isFollowing = currentUser ? currentUser.following.includes(post.author.uid) : false;
 
   return (
-    <div className="vertical-snap-item relative h-full w-full flex items-center justify-center bg-black">
+    <div ref={containerRef} className="vertical-snap-item relative h-full w-full flex items-center justify-center bg-black">
       
       {/* HTML5 Native Video Tag */}
       <video
@@ -530,36 +561,38 @@ function PostCardItem({ post, currentUser, onLike, onSave, onShare, onCommentOpe
   const isFollowing = currentUser ? currentUser.following.includes(post.author.uid) : false;
 
   return (
-    <div className="bg-slate-900 border border-slate-800/80 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-lg shadow-slate-950/20">
+    <div className="bg-slate-900 border border-slate-800/80 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-lg shadow-slate-950/25">
       
-      {/* 1. Header */}
+      {/* 1. Facebook Style Header */}
       <div className="p-4 flex items-center justify-between">
         
-        {/* Left Side: Follow button if not current user */}
+        {/* Left Side: Follow button / Actions */}
         {currentUser && post.author.uid !== currentUser.uid && (
           <button
             onClick={() => onFollow(post.author.uid)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               isFollowing 
-                ? 'bg-slate-800 text-slate-400 hover:bg-slate-750' 
-                : 'bg-brand-primary text-white hover:opacity-90'
+                ? 'bg-slate-850 text-slate-400 hover:bg-slate-800' 
+                : 'bg-brand-primary/10 text-brand-primary border border-brand-primary/20 hover:bg-brand-primary hover:text-white'
             }`}
           >
-            {isFollowing ? 'متابع' : 'متابعة'}
+            {isFollowing ? 'متابع ✓' : '+ متابعة'}
           </button>
         )}
 
-        {/* Right Side: Creator info */}
+        {/* Right Side: Creator info with privacy icon (Globe representing Facebook-like public feed) */}
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 justify-end">
               {post.author.isVerified && <CheckCircle className="w-3.5 h-3.5 text-brand-secondary fill-current" />}
-              <span className="text-sm font-bold text-white">{post.author.displayName}</span>
+              <span className="text-sm font-extrabold text-white">{post.author.displayName}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 justify-end">
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 justify-end mt-0.5">
+              <span className="font-mono">@{post.author.username}</span>
+              <span aria-hidden="true">·</span>
               <span>{post.timestamp}</span>
               <span aria-hidden="true">·</span>
-              <span className="font-mono">@{post.author.username}</span>
+              <span title="عام للجميع" className="text-xs">🌎</span>
             </div>
           </div>
           <img 
@@ -571,67 +604,75 @@ function PostCardItem({ post, currentUser, onLike, onSave, onShare, onCommentOpe
 
       </div>
 
-      {/* 2. Text Caption */}
+      {/* 2. Text Caption Content */}
       <div className="px-4 pb-3.5 text-right">
         <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-line">
           {post.content}
         </p>
       </div>
 
-      {/* 3. High Fidelity Image Content */}
-      <div className="relative aspect-[4/3] bg-slate-950 overflow-hidden group">
-        <img 
-          src={post.mediaUrl} 
-          alt="Post Content" 
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02]"
-        />
-        
-        {/* Interactive Double Tap overlay representation (Heart indicator) */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-          <span className="text-xs bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-semibold">
-            انقر مرتين للتفاعل ❤️
-          </span>
+      {/* 3. Edge-to-Edge Image Content */}
+      {post.mediaUrl && (
+        <div className="relative aspect-[4/3] bg-slate-950 overflow-hidden border-y border-slate-950">
+          <img 
+            src={post.mediaUrl} 
+            alt="Post Content" 
+            className="w-full h-full object-cover transition-transform duration-700 hover:scale-[1.01]"
+          />
+        </div>
+      )}
+
+      {/* 4. Facebook Reaction Counters Bar */}
+      <div className="px-4 py-3 flex justify-between items-center text-xs text-slate-400 border-b border-slate-850/60 bg-slate-950/10">
+        {/* Left Side: Comments & Shares count */}
+        <div className="flex gap-2 font-mono text-[11px]">
+          <span>{post.comments.length} تعليق</span>
+          <span>•</span>
+          <span>{post.shares || Math.floor(post.likes.length * 0.4)} مشاركة</span>
+        </div>
+
+        {/* Right Side: Facebook Reactions Icons */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-mono font-bold text-slate-300">{post.likes.length}</span>
+          <div className="flex -space-x-1 space-x-reverse items-center">
+            <span className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[10px] shadow border border-slate-900">👍</span>
+            <span className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-[10px] shadow border border-slate-900">❤️</span>
+            <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center text-[10px] shadow border border-slate-900">😮</span>
+          </div>
         </div>
       </div>
 
-      {/* 4. Action Bar */}
-      <div className="p-4 flex items-center justify-between border-t border-slate-850">
+      {/* 5. Facebook Interactive Action Buttons */}
+      <div className="p-2.5 flex items-center justify-around text-slate-300">
         
-        {/* Right Side Actions: Like & Comment */}
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={(e) => onLike(post.id, e)}
-            className="flex items-center gap-1.5 text-slate-300 hover:text-brand-primary transition-colors focus:outline-none"
-          >
-            <Heart className={`w-5 h-5 ${isLiked ? 'fill-current text-brand-primary' : ''}`} />
-            <span className="text-xs font-mono font-semibold">{post.likes.length}</span>
-          </button>
-          
-          <button 
-            onClick={() => onCommentOpen(post)}
-            className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors focus:outline-none"
-          >
-            <MessageCircle className="w-5 h-5" />
-            <span className="text-xs font-mono font-semibold">{post.comments.length}</span>
-          </button>
-        </div>
+        {/* Share Button */}
+        <button 
+          onClick={(e) => onShare(post, e)}
+          className="flex-1 py-1.5 hover:bg-slate-800 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-all active:scale-95"
+        >
+          <Share2 className="w-4 h-4" />
+          <span>مشاركة</span>
+        </button>
 
-        {/* Left Side Actions: Save & Share */}
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={(e) => onSave(post.id, e)}
-            className="text-slate-300 hover:text-amber-500 transition-colors focus:outline-none"
-          >
-            <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current text-amber-500' : ''}`} />
-          </button>
+        {/* Comment Button */}
+        <button 
+          onClick={() => onCommentOpen(post)}
+          className="flex-1 py-1.5 hover:bg-slate-800 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-all active:scale-95"
+        >
+          <MessageCircle className="w-4 h-4" />
+          <span>تعليق</span>
+        </button>
 
-          <button 
-            onClick={(e) => onShare(post, e)}
-            className="text-slate-300 hover:text-white transition-colors focus:outline-none"
-          >
-            <Share2 className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Like Button */}
+        <button 
+          onClick={(e) => onLike(post.id, e)}
+          className={`flex-1 py-1.5 hover:bg-slate-800 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all active:scale-95 ${
+            isLiked ? 'text-brand-primary' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
+          <span>أعجبني</span>
+        </button>
 
       </div>
 

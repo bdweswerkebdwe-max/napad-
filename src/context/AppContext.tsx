@@ -755,10 +755,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- Chats & Messaging Actions ---
 
-  const sendDirectMessage = (chatId: string, text: string, mediaType: 'text' | 'image' | 'voice' = 'text') => {
-    // Retain simulated chats in local-state memory for active interactions
-    // This allows immediately chatting with the system simulation creators!
-    alert('تم إرسال رسالتك بأمان عبر خادوم الدردشة الحية 📨.');
+  const sendDirectMessage = async (chatId: string, text: string, mediaType: 'text' | 'image' | 'voice' | 'call_log' = 'text') => {
+    if (!currentUser) return;
+    const msgId = `msg_${Date.now()}`;
+    const newMsg: Message = {
+      id: msgId,
+      senderId: currentUser.uid,
+      text: text.trim(),
+      timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      mediaType
+    };
+
+    try {
+      await setDoc(doc(db, `chats/${chatId}/messages`, msgId), newMsg);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `chats/${chatId}/messages/${msgId}`);
+    }
   };
 
   const createStory = async (mediaUrl: string) => {
