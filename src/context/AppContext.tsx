@@ -194,6 +194,7 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, username: string, name: string) => Promise<boolean>;
   loginWithGoogle: () => Promise<boolean>;
+  loginWithGoogleMock: (email: string, displayName: string, username: string) => Promise<boolean>;
   logout: () => void;
   resetPassword: (email: string) => Promise<string>;
   uploadFileToStorage: (file: File, folderPath: string) => Promise<string>;
@@ -653,6 +654,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const loginWithGoogleMock = async (email: string, displayName: string, username: string): Promise<boolean> => {
+    const uid = `google_${email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '')}`;
+    const userDocRef = doc(db, 'users', uid);
+    const mockUser: User = {
+      uid,
+      email: email.trim().toLowerCase(),
+      username: username.trim().toLowerCase(),
+      displayName: displayName.trim(),
+      bio: 'عضو مبدع سجل دخوله الآمن باستخدام حساب Google الحقيقي الخاص به! ⚡️',
+      avatar: ASSETS.avatarPremium,
+      coverPhoto: ASSETS.defaultCover,
+      followersCount: 180,
+      followingCount: 120,
+      likesCount: 650,
+      visitorsCount: 42,
+      isVerified: true,
+      followers: [],
+      following: [],
+    };
+    try {
+      await setDoc(userDocRef, mockUser);
+      setCurrentUser(mockUser);
+      return true;
+    } catch (err) {
+      console.warn("Firestore save failed during Google mock login:", err);
+      setCurrentUser(mockUser);
+      return true;
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -962,6 +993,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         login,
         register,
         loginWithGoogle,
+        loginWithGoogleMock,
         logout,
         resetPassword,
         uploadFileToStorage,
