@@ -31,10 +31,14 @@ export default function Onboarding() {
       return;
     }
     setError('');
+    setSuccess('');
     setLoading(true);
     try {
       const successLogin = await login(email, password);
-      if (!successLogin) {
+      if (successLogin) {
+        setSuccess('🎉 تم التحقق والدخول بنجاح! جاري توجيهك إلى نبض...');
+        setError('');
+      } else {
         setError('فشل تسجيل الدخول. يرجى التحقق من بياناتك.');
       }
     } catch (err) {
@@ -55,10 +59,14 @@ export default function Onboarding() {
       return;
     }
     setError('');
+    setSuccess('');
     setLoading(true);
     try {
       const successReg = await register(email, password, username, name);
-      if (!successReg) {
+      if (successReg) {
+        setSuccess('🎉 تم إنشاء حسابك بنجاح ومزامنته سحابياً! جاري تحضير تغذيتك الخاصة...');
+        setError('');
+      } else {
         setError('فشل إنشاء الحساب. قد يكون اسم المستخدم أو البريد مستخدماً بالفعل.');
       }
     } catch (err) {

@@ -52,6 +52,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [showFiltersTray, setShowFiltersTray] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState<'0.5x' | '1x' | '2x'>('1x');
   const [isBeautyEnabled, setIsBeautyEnabled] = useState(false);
+  const [isFlashEnabled, setIsFlashEnabled] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   
   // Timer States
@@ -507,6 +508,10 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               )
             )}
             
+            {isFlashEnabled && (
+              <div className="absolute inset-0 bg-white/20 pointer-events-none mix-blend-screen z-10" />
+            )}
+            
             <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 pointer-events-none" />
             
             {countdown !== null && (
@@ -535,12 +540,23 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               </button>
             )}
 
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className={`p-2.5 bg-black/40 backdrop-blur-md rounded-full border border-white/5 text-white ${isMuted ? 'text-red-400' : 'text-emerald-400'}`}
-            >
-              <Volume2 className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsFlashEnabled(!isFlashEnabled)}
+                className={`p-2.5 bg-black/40 backdrop-blur-md rounded-full border transition-colors ${isFlashEnabled ? 'text-yellow-400 border-yellow-500/50' : 'text-slate-400 border-white/5'}`}
+                title="فلاش الكاميرا"
+              >
+                <Flame className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMuted(!isMuted)}
+                className={`p-2.5 bg-black/40 backdrop-blur-md rounded-full border border-white/5 text-white ${isMuted ? 'text-red-400' : 'text-emerald-400'}`}
+              >
+                <Volume2 className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* ======================= FLOATING SIDEBAR (RIGHT COLUMN) ======================= */}
