@@ -735,15 +735,34 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             {!mediaUrl && mainTab !== 'live' && mainTab !== 'audio_room' && (
               <div className="flex items-center justify-around px-8">
                 
-                {/* Effects tray trigger */}
+                {/* Instant Demo Publish Button */}
                 <button 
-                  onClick={() => setShowFiltersTray(true)}
+                  type="button"
+                  onClick={async () => {
+                    if (!currentUser) return;
+                    setIsUploading(true);
+                    try {
+                      if (mainTab === 'video') {
+                        await createNewPost('video', textContent || 'مقطع إبداعي هادف ومميز من نبض ⚡️🎥', 'https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4', privacy, hashtags);
+                        alert("🎉 تم نشر مقطع الفيديو التجريبي بنجاح بالتغذية العامة!");
+                      } else {
+                        await createStory('https://images.unsplash.com/photo-1478737270239-2f02b77fc618?auto=format&fit=crop&q=80&w=600');
+                        alert("🎉 تم نشر قصة سريعة بنجاح لمتابعيك!");
+                      }
+                      onClose();
+                    } catch (e) {
+                      alert("فشل النشر السريع.");
+                    } finally {
+                      setIsUploading(false);
+                    }
+                  }}
+                  disabled={isUploading}
                   className="flex flex-col items-center gap-1.5 focus:outline-none"
                 >
-                  <div className="w-12 h-12 bg-white/15 hover:bg-white/25 rounded-xl border border-white/10 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all">
-                    <Smile className="w-6 h-6 text-yellow-300 animate-bounce" />
+                  <div className="w-12 h-12 bg-brand-primary/20 hover:bg-brand-primary/45 rounded-xl border border-brand-primary/40 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-all">
+                    <Send className="w-5 h-5 text-brand-secondary transform rotate-180 animate-pulse" />
                   </div>
-                  <span className="text-[10px] text-white font-bold">مؤثرات</span>
+                  <span className="text-[10px] text-white font-bold">نشر فوري 🚀</span>
                 </button>
 
                 {/* Big Shutter Record Button */}
@@ -887,6 +906,23 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               إنهاء البث 🔴
             </button>
 
+            <button
+              type="button"
+              onClick={async () => {
+                if (!currentUser) return;
+                try {
+                  await createNewPost('text-image', `أنا الآن في بث مباشر تفاعلي! تفضلوا بالانضمام والمشاركة لمناقشة: "${liveTitle}" 🔴👇`, 'https://images.unsplash.com/photo-1516280440614-37939bbacd6a?auto=format&fit=crop&q=80&w=600', 'public', ['بث_مباشر', 'لايف_نبض']);
+                  alert("📣 تم نشر رابط بثك المباشر في التغذية العامة بنجاح!");
+                } catch (e) {
+                  alert("فشل نشر الرابط.");
+                }
+              }}
+              className="px-3 py-2 bg-brand-primary text-white text-[11px] font-bold rounded-xl hover:opacity-90 active:scale-95 transition-all shadow-md flex items-center gap-1"
+            >
+              <Send className="w-3.5 h-3.5 text-brand-secondary transform rotate-180" />
+              <span>انشر البث 📣</span>
+            </button>
+
             <div className="flex items-center gap-2">
               <span className="text-[10px] bg-red-600 text-white font-bold px-2.5 py-1.5 rounded-lg animate-pulse">مباشر LIVE</span>
               <span className="text-[10px] bg-black/40 backdrop-blur-md px-2.5 py-1.5 rounded-lg font-mono">👁️ 1,240</span>
@@ -941,6 +977,23 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl"
             >
               غادر بهدوء 👋
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                if (!currentUser) return;
+                try {
+                  await createNewPost('text-image', `مجلسنا الصوتي الحواري نشط الآن ويبث حياً ومباشرة! انضموا إلينا للمناقشة والمشاركة حول: "${audioRoomName}" 🎤📻`, 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?auto=format&fit=crop&q=80&w=600', 'public', ['مجلس_صوتي', 'صالون_نبض']);
+                  alert("🔗 تم نشر رابط مجلسك الصوتي في التغذية العامة بنجاح!");
+                } catch (e) {
+                  alert("فشل نشر الرابط.");
+                }
+              }}
+              className="px-3 py-2 bg-emerald-600 text-white text-[11px] font-bold rounded-xl hover:opacity-90 active:scale-95 transition-all shadow-md flex items-center gap-1"
+            >
+              <Send className="w-3.5 h-3.5 text-brand-secondary transform rotate-180" />
+              <span>انشر المجلس 🔗</span>
             </button>
             <div className="text-right">
               <h3 className="text-xs font-bold text-slate-400">مجلس حواري صوتي مباشر</h3>
