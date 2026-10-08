@@ -1017,29 +1017,32 @@ interface TabsSwitcherProps {
 }
 
 function TabsSwitcher({ activeTab, onChange }: TabsSwitcherProps) {
-  const tabsList: { id: MainTabType; name: string }[] = [
-    { id: 'video', name: 'فيديو 🎥' },
-    { id: 'post', name: 'منشور ✍️' },
-    { id: 'story', name: 'قصة 💫' },
-    { id: 'live', name: 'بث مباشر 🔴' },
-    { id: 'audio_room', name: 'غرفة صوتية 🎤' }
+  const tabsList: { id: MainTabType; name: string; icon: React.ReactNode }[] = [
+    { id: 'video', name: 'فيديو 🎥', icon: <Video className="w-3.5 h-3.5" /> },
+    { id: 'post', name: 'منشور ✍️', icon: <FileText className="w-3.5 h-3.5" /> },
+    { id: 'story', name: 'قصة 💫', icon: <BookOpen className="w-3.5 h-3.5" /> },
+    { id: 'live', name: 'بث مباشر 🔴', icon: <Radio className="w-3.5 h-3.5" /> },
+    { id: 'audio_room', name: 'غرفة صوتية 🎤', icon: <Mic className="w-3.5 h-3.5" /> }
   ];
 
   return (
     <div className="w-full overflow-x-auto no-scrollbar py-2 text-center select-none bg-black/60 border-t border-white/5">
-      <div className="flex flex-row-reverse items-center justify-center gap-6 px-6 whitespace-nowrap">
+      <div className="flex flex-row-reverse items-center justify-center gap-5 px-6 whitespace-nowrap">
         {tabsList.map(tab => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`text-xs font-extrabold pb-1.5 px-1.5 transition-all ${
+            className={`flex items-center gap-1.5 text-xs font-extrabold pb-1.5 px-2.5 transition-all rounded-full ${
               activeTab === tab.id 
-                ? 'text-brand-primary border-b-2 border-brand-primary scale-110 font-bold' 
+                ? 'text-brand-primary border-b-2 border-brand-primary scale-105 font-bold bg-white/5 py-1' 
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            {tab.name}
+            {/* Direct Publishing Icon next to each mode icon */}
+            <Send className={`w-3 h-3 text-brand-secondary transform rotate-180 ${activeTab === tab.id ? 'opacity-100 scale-110' : 'opacity-40'}`} />
+            {tab.icon}
+            <span>{tab.name}</span>
           </button>
         ))}
       </div>
