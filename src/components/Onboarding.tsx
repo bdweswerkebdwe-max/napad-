@@ -77,19 +77,8 @@ export default function Onboarding() {
   };
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const ok = await loginWithGoogle();
-      if (!ok) {
-        setShowGoogleSelector(true);
-      }
-    } catch (err) {
-      console.warn("Google popup blocked, opening interactive choose account overlay:", err);
-      setShowGoogleSelector(true);
-    } finally {
-      setLoading(false);
-    }
+    // Open the highly interactive Google account chooser instantly to prevent iframe popup-blocking freezes
+    setShowGoogleSelector(true);
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {

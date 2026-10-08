@@ -94,6 +94,19 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const requestCameraPermissions = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setCameraStream(stream);
+      setPermissionError(false);
+      alert("✅ تم منح أذونات الوصول للكاميرا والمايكروفون بنجاح!");
+    } catch (err) {
+      console.warn("User denied or browser blocked camera permissions:", err);
+      setPermissionError(true);
+      alert("⚠️ تعذر تفعيل الكاميرا تلقائياً. يرجى تفعيل أذونات الكاميرا والمايكروفون من إعدادات الموقع بالمتصفح.");
+    }
+  };
+
   // Trigger media stream on mainTab change or setup changes
   useEffect(() => {
     // If post or audio room (before simulation), we do not need live video camera preview, but audio room needs mic
@@ -485,12 +498,21 @@ export default function CreateModal({ onClose }: CreateModalProps) {
                 <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
                   الرجاء تفعيل إذن الوصول للكاميرا والمايكروفون من إعدادات المتصفح للتمكن من التقاط ومشاركة فيديوهاتك المباشرة وسرد قصصك.
                 </p>
-                <label
-                  htmlFor="camera-upload-btn"
-                  className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold cursor-pointer hover:opacity-95"
-                >
-                  رفع ملف من الاستوديو كبديل 📁
-                </label>
+                <div className="flex flex-col gap-2 w-full max-w-xs">
+                  <button
+                    type="button"
+                    onClick={requestCameraPermissions}
+                    className="w-full py-2.5 bg-gradient-to-l from-brand-primary to-brand-gradient-start text-white rounded-xl text-xs font-bold hover:opacity-95 shadow-md active:scale-95 transition-all"
+                  >
+                    طلب إذن الوصول للكاميرا والمايكروفون الآن 🎙️📷
+                  </button>
+                  <label
+                    htmlFor="camera-upload-btn"
+                    className="w-full py-2 bg-slate-900 border border-slate-800 text-slate-300 rounded-xl text-xs font-bold cursor-pointer hover:bg-slate-850 block text-center"
+                  >
+                    رفع ملف من الاستوديو كبديل 📁
+                  </label>
+                </div>
               </div>
             ) : (
               mainTab !== 'audio_room' && (
