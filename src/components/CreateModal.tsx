@@ -277,13 +277,22 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     setIsUploading(true);
 
     try {
-      const finalMedia = mediaUrl || 'https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4';
-      await createNewPost('video', textContent || 'مقطع فيديو قصير من منصة نبض الرقمية 🎥💫', finalMedia, privacy, hashtags);
+      let finalMedia = mediaUrl;
+      // If mediaUrl is a local blob URL, upload it to Firebase Storage first
+      if (mediaUrl.startsWith('blob:')) {
+        const response = await fetch(mediaUrl);
+        const blob = await response.blob();
+        const fileObj = new File([blob], `video_${Date.now()}.mp4`, { type: 'video/mp4' });
+        finalMedia = await uploadFileToStorage(fileObj, 'videos');
+      }
+
+      const activeMedia = finalMedia || 'https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4';
+      await createNewPost('video', textContent || 'مقطع فيديو قصير من منصة نبض الرقمية 🎥💫', activeMedia, privacy, hashtags);
       
       setSuccessMsg('🎉 تم النشر والمزامنة سحابياً بنجاح!');
       setTimeout(() => onClose(), 1200);
     } catch (e) {
-      alert("حدث خطأ في المزامنة.");
+      alert("حدث خطأ في الرفع أو المزامنة السحابية.");
     } finally {
       setIsUploading(false);
     }
@@ -294,32 +303,32 @@ export default function CreateModal({ onClose }: CreateModalProps) {
     if (!currentUser) return;
     setIsUploading(true);
     try {
-      const finalMedia = mediaUrl || '/src/assets/images/post_scenic_1790855694074.jpg';
-      await createStory(finalMedia);
+      let finalMedia = mediaUrl;
+      if (mediaUrl.startsWith('blob:')) {
+        const response = await fetch(mediaUrl);
+        const blob = await response.blob();
+        const fileObj = new File([blob], `story_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        finalMedia = await uploadFileToStorage(fileObj, 'images');
+      }
+      const activeMedia = finalMedia || '/src/assets/images/post_scenic_1790855694074.jpg';
+      await createStory(activeMedia);
       setSuccessMsg('🎉 تم إضافة القصة اليومية بنجاح لمتابعيك!');
       setTimeout(() => onClose(), 1000);
     } catch (e) {
-      alert("حدث خطأ.");
+      alert("حدث خطأ أثناء رفع القصة.");
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Direct Gallery Upload
+  // Direct Gallery Upload -> Opens Preview Screen instantly
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setIsUploading(true);
-    try {
-      const isVideo = mainTab === 'video';
-      const url = await uploadFileToStorage(file, isVideo ? 'videos' : 'images');
-      setMediaUrl(url);
-      alert('تم رفع ملفك بنجاح للرفع السحابي! 🟢');
-    } catch (err) {
-      alert('فشل الرفع السحابي.');
-    } finally {
-      setIsUploading(false);
-    }
+    
+    // Create instant local preview URL
+    const localUrl = URL.createObjectURL(file);
+    setMediaUrl(localUrl);
   };
 
   // Publish standard text post
