@@ -74,6 +74,11 @@ export default function CreateModal({ onClose }: CreateModalProps) {
   const [hashtagInput, setHashtagInput] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Facebook Video Studio states
+  const [videoModeType, setVideoModeType] = useState<'camera' | 'facebook_studio'>('camera');
+  const [videoTitle, setVideoTitle] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+
   // LIVE simulator states
   const [showLiveSimulator, setShowLiveSimulator] = useState(false);
   const [liveTitle, setLiveTitle] = useState('بث مباشر تفاعلي لمشاركة اللحظة ⚡️');
@@ -554,6 +559,7 @@ export default function CreateModal({ onClose }: CreateModalProps) {
 
             {mainTab === 'video' && (
               <button
+                type="button"
                 onClick={() => setShowSoundLibrary(true)}
                 className="flex items-center gap-1.5 px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white text-xs font-bold"
               >
@@ -728,35 +734,94 @@ export default function CreateModal({ onClose }: CreateModalProps) {
               </div>
             )}
 
-            {/* 4. AUDIO ROOM setup form overlay */}
+            {/* 4. Clubhouse & Discord Style Audio Room Setup Form */}
             {mainTab === 'audio_room' && !showAudioRoomSimulator && (
-              <div className="mx-4 p-5 bg-slate-950/90 border border-slate-850 rounded-3xl space-y-4 text-right shadow-xl">
-                <h3 className="text-xs font-extrabold text-white">إطلاق مجلس حواري صوتي</h3>
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 block font-semibold">اسم الغرفة والمجلس</label>
-                    <input
-                      type="text"
-                      value={audioRoomName}
-                      onChange={(e) => setAudioRoomName(e.target.value)}
-                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right focus:outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 block font-semibold">الحد الأقصى للمتحدثين</label>
-                    <input
-                      type="number"
-                      value={audioSpeakersCount}
-                      onChange={(e) => setAudioSpeakersCount(e.target.value)}
-                      className="w-full h-9 px-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white text-right focus:outline-none"
-                    />
+              <div className="mx-4 p-6 bg-[#0c121f]/95 backdrop-blur-xl border border-emerald-500/30 rounded-3xl space-y-5 text-right shadow-2xl animate-slideUp">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                  <span className="text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black px-3 py-1 rounded-full uppercase tracking-wider animate-pulse">
+                    Clubhouse Voice Space 🎙️
+                  </span>
+                  <h3 className="text-sm font-extrabold text-white">إعداد الغرفة والمجلس الصوتي</h3>
+                </div>
+
+                {/* Room Title Input */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-slate-300 block font-bold">اسم المجلس أو الغرفة</label>
+                  <input
+                    type="text"
+                    placeholder="مثل: صالون نبض التقني ونقاشات الذكاء الاصطناعي 💻🎙️"
+                    value={audioRoomName}
+                    onChange={(e) => setAudioRoomName(e.target.value)}
+                    className="w-full h-11 px-4 bg-slate-900 border border-slate-700/80 focus:border-emerald-500 rounded-xl text-xs text-white text-right focus:outline-none transition-all shadow-inner"
+                  />
+                </div>
+
+                {/* Seat Layout Selector */}
+                <div className="space-y-2">
+                  <label className="text-[11px] text-slate-300 block font-bold">اختر عدد مقاعد المتحدثين</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { count: '4', label: 'جلسة مصغرة (4)' },
+                      { count: '8', label: 'صالون (8)' },
+                      { count: '16', label: 'قاعة كبرى (16)' }
+                    ].map(seat => (
+                      <button
+                        key={seat.count}
+                        type="button"
+                        onClick={() => setAudioSpeakersCount(seat.count)}
+                        className={`py-2 px-3 rounded-xl text-[11px] font-bold text-center transition-all ${
+                          audioSpeakersCount === seat.count 
+                            ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md scale-105' 
+                            : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {seat.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
+
+                {/* Live Seat Preview Grid */}
+                <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col items-center space-y-2">
+                  <span className="text-[10px] text-slate-400 font-bold">معاينة تخطيط المقاعد ({audioSpeakersCount} مقاعد)</span>
+                  <div className="flex items-center justify-center gap-3 py-1">
+                    {/* Host Seat */}
+                    <div className="w-10 h-10 rounded-full border-2 border-emerald-500 flex items-center justify-center bg-emerald-500/20 text-emerald-400 text-xs font-bold animate-pulse">
+                      👑
+                    </div>
+                    {/* Speaker Seats preview */}
+                    {Array.from({ length: Math.min(parseInt(audioSpeakersCount) || 4, 5) - 1 }).map((_, i) => (
+                      <div key={i} className="w-8 h-8 rounded-full border border-slate-700 flex items-center justify-center bg-slate-800 text-[10px] text-slate-300">
+                        🎙️
+                      </div>
+                    ))}
+                    {parseInt(audioSpeakersCount) > 5 && (
+                      <span className="text-[10px] text-slate-400 font-mono">+{parseInt(audioSpeakersCount) - 5}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Advanced Options */}
+                <div className="pt-2 space-y-2.5 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between text-xs text-slate-300 font-semibold">
+                    <span>✋ السماح للمستمعين برفع اليد لطلب المايك</span>
+                    <input type="checkbox" defaultChecked className="w-4 h-4 accent-emerald-600 rounded cursor-pointer" />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-300 font-semibold">
+                    <span>🎙️ تسجيل الحوار الصوتي تلقائياً</span>
+                    <input type="checkbox" className="w-4 h-4 accent-emerald-600 rounded cursor-pointer" />
+                  </div>
+                </div>
+
+                {/* Create Audio Room Button */}
                 <button
+                  type="button"
                   onClick={handleStartAudioRoom}
-                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg"
+                  className="w-full h-12 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:opacity-95 text-white text-xs font-black rounded-2xl shadow-xl shadow-emerald-600/30 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
-                  افتح المجلس الصوتي السحابي 🎤
+                  <span>افتح المجلس الصوتي الآن 🎤</span>
                 </button>
               </div>
             )}
