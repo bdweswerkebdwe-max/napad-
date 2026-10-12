@@ -267,6 +267,8 @@ export default function CreateModal({ onClose }: CreateModalProps) {
       recordingTimerRef.current = null;
     }
     setIsRecording(false);
+    // Automatically transition to the Preview & Publish card banner
+    setMediaUrl('https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4');
   };
 
   // Publish video post
