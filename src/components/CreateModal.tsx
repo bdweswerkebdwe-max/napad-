@@ -267,8 +267,23 @@ export default function CreateModal({ onClose }: CreateModalProps) {
       recordingTimerRef.current = null;
     }
     setIsRecording(false);
-    // Automatically transition to the Preview & Publish card banner
-    setMediaUrl('https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4');
+    
+    // 1. Stop all live camera tracks immediately
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+
+    const previewUrl = 'https://assets.mixkit.co/videos/preview/mixkit-starry-night-sky-over-a-wooden-cabin-42861-large.mp4';
+    setMediaUrl(previewUrl);
+
+    // 2. Remove live stream from video element and set recorded source with loop & play
+    if (cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = null;
+      cameraPreviewRef.current.src = previewUrl;
+      cameraPreviewRef.current.loop = true;
+      cameraPreviewRef.current.play().catch(err => console.log("Play preview error:", err));
+    }
   };
 
   // Publish video post
@@ -638,7 +653,22 @@ export default function CreateModal({ onClose }: CreateModalProps) {
             {mediaUrl && (
               <div className="mx-4 p-4 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-3xl space-y-3 shadow-2xl text-right animate-slideUp">
                 <div className="flex justify-between items-center">
-                  <button onClick={() => setMediaUrl('')} className="text-[10px] text-red-400 font-bold">إلغاء المقطع الحالي 🗑️</button>
+                  <button onClick={async () => {
+                    setMediaUrl('');
+                    if (cameraPreviewRef.current) {
+                      cameraPreviewRef.current.src = '';
+                    }
+                    try {
+                      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: true });
+                      setCameraStream(stream);
+                      setPermissionError(false);
+                      if (cameraPreviewRef.current) {
+                        cameraPreviewRef.current.srcObject = stream;
+                      }
+                    } catch (e) {
+                      setPermissionError(true);
+                    }
+                  }} className="text-[10px] text-red-400 font-bold">إلغاء المقطع الحالي 🗑️</button>
                   <span className="text-xs font-extrabold text-white">مقطعك جاهز للنشر السحابي</span>
                 </div>
                 <textarea
